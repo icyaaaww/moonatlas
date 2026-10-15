@@ -2,7 +2,8 @@
 
 ## 1.0.0 — 2026-10-15
 
-Local stable build. GitHub release and CI for this version are pending publication.
+Stable source and offline distribution: https://github.com/icyaaaww/moonatlas/releases/tag/v1.0.0
+Local validation is recorded in docs/validation.md; remote CI is tracked against the release commit in GitHub Actions.
 
 - Explicit first-use home with import, recovery and fictional example choices.
 - Cancellable file reads and merge/replace previews listing every affected or skipped file; removals require acknowledgement before applying.

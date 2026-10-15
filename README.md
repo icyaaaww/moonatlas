@@ -6,14 +6,14 @@
 先看主题与文档，再展开标题、查看带行号的原文；把你的分类判断保存下来，
 下一次更新资料时继续使用。
 
-**当前版本：1.0.0，本地正式版已构建。GitHub 1.0 发布与远程 CI 尚待执行；尚未发布 Mooncakes，尚无真实用户验证结果。**
+**当前版本：1.0.0 正式版。尚未发布 Mooncakes，尚无真实用户验证结果。测试环境及范围见验证记录。**
 
 [GitHub 仓库](https://github.com/icyaaaww/moonatlas) · [离线使用包](https://github.com/icyaaaww/moonatlas/releases/latest) · [验证记录](docs/validation.md)
 
 ## 直接使用
 
-取得 `MoonAtlas-1.0.0-offline.zip` 后，解压并双击其中的 `MoonAtlas.html`。
-本地交付包与仓库同放在 outputs 目录；GitHub Releases 当前文件以实际已发布版本为准，旧版本保留在发布历史中。
+从 [1.0 正式版发布页](https://github.com/icyaaaww/moonatlas/releases/tag/v1.0.0) 下载 `MoonAtlas-1.0.0-offline.zip`，解压并双击其中的 `MoonAtlas.html`。
+源码包、升级说明和试用任务随版本提供；旧版本仍保留在发布历史中。
 不需要安装 Node、MoonBit，不需要账号、服务器或 API Key。浏览器实测范围见 [验证记录](docs/validation.md)。
 
 1. 首页选择“导入自己的资料”“继续上次整理”或“体验示例”。示例中的 8 篇文档均为虚构，不会自动混入自己的资料。
