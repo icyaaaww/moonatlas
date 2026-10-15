@@ -1,0 +1,162 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "icyaaaww/moonatlas"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn normalize_name(String) -> String
+
+pub fn parse_document(Document, Array[Preference]) -> Page
+
+pub fn validate_documents(Array[Document]) -> Array[Issue]
+
+// Errors
+
+// Types and methods
+pub(all) struct Alias {
+  name : String
+  target : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Alias::equal(Self, Self) -> Bool
+pub fn Alias::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Alias::not_equal(Self, Self) -> Bool
+pub fn Alias::to_json(Self) -> Json
+pub fn Alias::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Atlas {
+  schema : Int
+  pages : Array[Page]
+  concepts : Array[Concept]
+  links : Array[Link]
+  duplicates : Array[Duplicate]
+  issues : Array[Issue]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Atlas::equal(Self, Self) -> Bool
+pub fn Atlas::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Atlas::not_equal(Self, Self) -> Bool
+pub fn Atlas::to_json(Self) -> Json
+pub fn Atlas::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Change {
+  kind : String
+  path : String
+  previous_path : String
+  detail : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Change::equal(Self, Self) -> Bool
+pub fn Change::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Change::not_equal(Self, Self) -> Bool
+pub fn Change::to_json(Self) -> Json
+pub fn Change::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Concept {
+  id : String
+  label : String
+  sources : Array[Evidence]
+  paths : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Concept::equal(Self, Self) -> Bool
+pub fn Concept::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Concept::not_equal(Self, Self) -> Bool
+pub fn Concept::to_json(Self) -> Json
+pub fn Concept::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Document {
+  path : String
+  content : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Document::equal(Self, Self) -> Bool
+pub fn Document::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Document::not_equal(Self, Self) -> Bool
+pub fn Document::to_json(Self) -> Json
+pub fn Document::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Duplicate {
+  paths : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Duplicate::equal(Self, Self) -> Bool
+pub fn Duplicate::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Duplicate::not_equal(Self, Self) -> Bool
+pub fn Duplicate::to_json(Self) -> Json
+pub fn Duplicate::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Evidence {
+  path : String
+  start_line : Int
+  end_line : Int
+  quote : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Evidence::equal(Self, Self) -> Bool
+pub fn Evidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Evidence::not_equal(Self, Self) -> Bool
+pub fn Evidence::to_json(Self) -> Json
+pub fn Evidence::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Issue {
+  code : String
+  path : String
+  message : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Issue::equal(Self, Self) -> Bool
+pub fn Issue::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Issue::not_equal(Self, Self) -> Bool
+pub fn Issue::to_json(Self) -> Json
+pub fn Issue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Link {
+  from : String
+  target : String
+  line : Int
+  status : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Link::equal(Self, Self) -> Bool
+pub fn Link::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Link::not_equal(Self, Self) -> Bool
+pub fn Link::to_json(Self) -> Json
+pub fn Link::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Page {
+  id : String
+  path : String
+  title : String
+  topic : String
+  assignment : String
+  sections : Array[Section]
+  tags : Array[String]
+  excerpt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Page::equal(Self, Self) -> Bool
+pub fn Page::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Page::not_equal(Self, Self) -> Bool
+pub fn Page::to_json(Self) -> Json
+pub fn Page::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Preference {
+  path : String
+  topic : String
+  title : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Preference::equal(Self, Self) -> Bool
+pub fn Preference::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Preference::not_equal(Self, Self) -> Bool
+pub fn Preference::to_json(Self) -> Json
+pub fn Preference::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Section {
+  id : String
+  title : String
+  level : Int
+  evidence : Evidence
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Section::equal(Self, Self) -> Bool
+pub fn Section::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Section::not_equal(Self, Self) -> Bool
+pub fn Section::to_json(Self) -> Json
+pub fn Section::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
