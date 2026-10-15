@@ -11,6 +11,8 @@ pub fn build_atlas(Array[Document], Array[Preference], Array[Alias]) -> Atlas
 
 pub fn compare_documents(Array[Document], Array[Document]) -> Array[Change]
 
+pub fn compare_sections(Document, Document) -> SectionComparison
+
 pub fn export_index(Atlas) -> String
 
 pub fn export_svg(Atlas, String) -> String
@@ -166,6 +168,32 @@ pub fn Section::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeEr
 pub fn Section::not_equal(Self, Self) -> Bool
 pub fn Section::to_json(Self) -> Json
 pub fn Section::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SectionChange {
+  id : String
+  title : String
+  kind : String
+  before : Evidence?
+  after : Evidence?
+  before_text : String
+  after_text : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SectionChange::equal(Self, Self) -> Bool
+pub fn SectionChange::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SectionChange::not_equal(Self, Self) -> Bool
+pub fn SectionChange::to_json(Self) -> Json
+pub fn SectionChange::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SectionComparison {
+  changes : Array[SectionChange]
+  issues : Array[Issue]
+  notes : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SectionComparison::equal(Self, Self) -> Bool
+pub fn SectionComparison::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SectionComparison::not_equal(Self, Self) -> Bool
+pub fn SectionComparison::to_json(Self) -> Json
+pub fn SectionComparison::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

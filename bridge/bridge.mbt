@@ -19,6 +19,8 @@ pub fn dispatch(input : String) -> String {
           @json.from_json(prefs),
           @json.from_json(aliases),
         ).to_json()
+      { "action": "sections", "before": before, "after": after, .. } =>
+        @atlas.compare_sections(@json.from_json(before), @json.from_json(after)).to_json()
       { "action": "compare", "before": before, "after": after, .. } =>
         Json(
           @atlas.compare_documents(

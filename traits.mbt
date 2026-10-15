@@ -141,3 +141,27 @@ pub extend Change with ToJson::{to_json}
 
 ///|
 pub extend Change with @json.FromJson::{from_json}
+
+///|
+pub extend SectionChange with Eq::{equal, not_equal}
+
+///|
+pub extend SectionChange with @debug.Debug::{to_repr}
+
+///|
+pub extend SectionChange with ToJson::{to_json}
+
+///|
+pub extend SectionChange with @json.FromJson::{from_json}
+
+///|
+pub extend SectionComparison with Eq::{equal, not_equal}
+
+///|
+pub extend SectionComparison with @debug.Debug::{to_repr}
+
+///|
+pub extend SectionComparison with ToJson::{to_json}
+
+///|
+pub extend SectionComparison with @json.FromJson::{from_json}
