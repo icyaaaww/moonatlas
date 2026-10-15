@@ -1,0 +1,53 @@
+name: MoonAtlas checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core-and-browser:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install MoonBit on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Install MoonBit on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: moon version --all
+      - run: moon check --target all
+      - run: moon test --target js
+      - run: moon test --target wasm-gc
+      - run: moon info
+      - run: moon fmt
+      - name: Verify interfaces and formatting
+        run: git diff --exit-code -- '*.mbt' '*.mbti' 'moon.mod' '**/moon.pkg'
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: moon run examples/demo --target js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: moonatlas-${{ runner.os }}
+          path: |
+            dist/MoonAtlas.html
+            test-results/

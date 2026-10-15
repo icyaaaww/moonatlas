@@ -1,0 +1,5 @@
+import {
+  "icyaaaww/moonatlas" @atlas,
+}
+
+pkgtype(kind: "executable")
