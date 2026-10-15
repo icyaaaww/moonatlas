@@ -1,9 +1,10 @@
+import {importFiles} from './helpers.mjs';
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 const app=pathToFileURL(fileURLToPath(new URL('../../dist/MoonAtlas.html',import.meta.url))).href;
 const file=(name,text)=>({name,mimeType:'text/plain',buffer:Buffer.from(text)});
-test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);});
+test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);await page.locator('#start-demo').click();});
 
 test('maintenance demo exposes all three workflows and local draft retains review notes',async({page})=>{
   await page.locator('#load-maintenance-demo').click();await expect(page.locator('.health-card')).toHaveCount(3);
@@ -14,7 +15,7 @@ test('maintenance demo exposes all three workflows and local draft retains revie
 });
 
 test('review status needs an ignore reason and survives download, reopen and undo',async({page})=>{
-  await page.locator('#files-input').setInputFiles(file('note.md','# A\n[missing](gone.md)'));
+  await importFiles(page,file('note.md','# A\n[missing](gone.md)'));
   await page.locator('[data-view="organize"]').click();
   const card=page.locator('.health-card[data-kind="link"]');
   await card.getByRole('button',{name:'忽略并备注',exact:true}).click();
@@ -30,21 +31,21 @@ test('review status needs an ignore reason and survives download, reopen and und
 });
 
 test('source update reopens a reviewed finding and a real fix removes it',async({page})=>{
-  await page.locator('#files-input').setInputFiles(file('note.md','# A\n[x](gone.md)'));
+  await importFiles(page,file('note.md','# A\n[x](gone.md)'));
   await page.locator('[data-view="organize"]').click();
   const card=page.locator('.health-card[data-kind="link"]');await card.getByRole('button',{name:'标记已处理',exact:true}).click();
   await page.getByLabel('处理备注（可选）').fill('已向维护者核对');await page.getByRole('button',{name:'保存处理记录',exact:true}).click();
-  await page.locator('#files-input').setInputFiles(file('note.md','# A\n[x](gone.md)\nUpdated'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await expect(card).toContainText('原文已变化');await expect(card).toContainText('已向维护者核对');
+  await importFiles(page,file('note.md','# A\n[x](gone.md)\nUpdated'));
+  await expect(card).toContainText('原文已变化');await expect(card).toContainText('已向维护者核对');
   await page.screenshot({path:'test-results/v03-health.png',fullPage:true});
-  await page.locator('#files-input').setInputFiles(file('gone.md','# Imported'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await expect(card).toHaveCount(0);
+  await importFiles(page,file('gone.md','# Imported'));
+  await expect(card).toHaveCount(0);
 });
 
 test('removed target points to baseline source at its actual line beyond initial preview',async({page})=>{
   const source='# Reader\n'+'padding text\n'.repeat(500)+'[target](target.md)';
-  await page.locator('#files-input').setInputFiles([file('ref.md',source),file('target.md','# Target')]);
-  await page.locator('#files-input').setInputFiles(file('ref.md',source));await page.getByRole('button',{name:'以本次文件替换资料集',exact:true}).click();
+  await importFiles(page,[file('ref.md',source),file('target.md','# Target')]);
+  await importFiles(page,file('ref.md',source),'replace');
   await page.locator('[data-view="changes"]').click();await page.locator('.impact-list summary').click();
   await page.getByRole('button',{name:'基线 · ref.md · L502 ↗',exact:true}).click();
   await expect(page.locator('#modal .highlight')).toContainText('[target](target.md)');await expect(page.locator('#modal')).toContainText('L499');
@@ -55,8 +56,8 @@ test('removed target points to baseline source at its actual line beyond initial
 test('next line change crosses pages and keeps literal text safely highlighted',async({page})=>{
   const original='# Title\n'+Array.from({length:140},(_,i)=>`line ${i}`).join('\n');
   const changed=original.replace('line 2\n','<script>first</script>\n').replace('line 130\n','changed at 130\n');
-  await page.locator('#files-input').setInputFiles(file('note.md',original));await page.locator('#files-input').setInputFiles(file('note.md',changed));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await page.locator('[data-view="changes"]').click();await page.getByRole('button',{name:'查看章节变化 · 1 处',exact:true}).click();
+  await importFiles(page,file('note.md',original));await importFiles(page,file('note.md',changed));
+  await page.locator('[data-view="changes"]').click();await page.getByRole('button',{name:'查看章节变化 · 1 处',exact:true}).click();
   await expect(page.locator('.diff-added')).toContainText('<script>first</script>');await expect(page.locator('.diff-deleted')).toContainText('line 2');
   await page.getByRole('button',{name:'下一处变化',exact:true}).click();await expect(page.locator('.diff-added.diff-active')).toContainText('changed at 130');
   await expect(page.locator('.diff-deleted.diff-active')).toContainText('line 130');
@@ -66,7 +67,7 @@ test('next line change crosses pages and keeps literal text safely highlighted',
 });
 
 test('exported report includes review notes and real reference positions without source body',async({page})=>{
-  await page.locator('#files-input').setInputFiles(file('note.md','# Title\nSECRET BODY'));
+  await importFiles(page,file('note.md','# Title\nSECRET BODY'));
   await page.locator('[data-view="organize"]').click();await page.getByRole('button',{name:'标记已处理',exact:true}).click();await page.getByLabel('处理备注（可选）').fill('核对完成');await page.getByRole('button',{name:'保存处理记录',exact:true}).click();
   await page.getByRole('button',{name:'导出整理报告',exact:true}).click();const pending=page.waitForEvent('download');await page.getByRole('button',{name:'下载 Markdown 报告',exact:true}).click();
   const report=await readFile(await (await pending).path(),'utf8');expect(report).toContain('核对完成');expect(report).toContain('已处理');expect(report).not.toContain('SECRET BODY');
@@ -74,7 +75,7 @@ test('exported report includes review notes and real reference positions without
 
 test('health task pagination and mobile filters remain usable',async({page})=>{
   await page.setViewportSize({width:390,height:844});
-  await page.locator('#files-input').setInputFiles(Array.from({length:35},(_,i)=>file(`note-${i}.md`,`# Note ${i}`)));
+  await importFiles(page,Array.from({length:35},(_,i)=>file(`note-${i}.md`,`# Note ${i}`)));
   await page.locator('[data-view="organize"]').click();await expect(page.locator('.health-card')).toHaveCount(30);
   await page.getByRole('button',{name:'下一页任务',exact:true}).click();await expect(page.locator('.health-card')).toHaveCount(5);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

@@ -9,6 +9,8 @@ import {
 // Values
 pub fn build_atlas(Array[Document], Array[Preference], Array[Alias]) -> Atlas
 
+pub fn classify_documents(Array[Document], Array[Preference], Array[String], String) -> BatchClassification
+
 pub fn compare_documents(Array[Document], Array[Document]) -> Array[Change]
 
 pub fn compare_sections(Document, Document) -> SectionComparison
@@ -26,6 +28,8 @@ pub fn normalize_name(String) -> String
 pub fn parse_document(Document, Array[Preference]) -> Page
 
 pub fn reconcile_preferences(Array[Document], Array[Document], Array[Preference]) -> Array[Preference]
+
+pub fn search_documents(Array[Document], Array[Preference], String) -> SearchResult
 
 pub fn update_impacts(Array[Document], Array[Document]) -> ImpactReport
 
@@ -57,6 +61,16 @@ pub fn Atlas::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeErro
 pub fn Atlas::not_equal(Self, Self) -> Bool
 pub fn Atlas::to_json(Self) -> Json
 pub fn Atlas::to_repr(Self) -> @debug.Repr
+
+pub(all) struct BatchClassification {
+  preferences : Array[Preference]
+  issues : Array[Issue]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn BatchClassification::equal(Self, Self) -> Bool
+pub fn BatchClassification::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn BatchClassification::not_equal(Self, Self) -> Bool
+pub fn BatchClassification::to_json(Self) -> Json
+pub fn BatchClassification::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Change {
   kind : String
@@ -224,6 +238,29 @@ pub fn Preference::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecod
 pub fn Preference::not_equal(Self, Self) -> Bool
 pub fn Preference::to_json(Self) -> Json
 pub fn Preference::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SearchHit {
+  path : String
+  line : Int
+  snippet : String
+  kind : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SearchHit::equal(Self, Self) -> Bool
+pub fn SearchHit::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SearchHit::not_equal(Self, Self) -> Bool
+pub fn SearchHit::to_json(Self) -> Json
+pub fn SearchHit::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SearchResult {
+  hits : Array[SearchHit]
+  total : Int
+  issues : Array[Issue]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SearchResult::equal(Self, Self) -> Bool
+pub fn SearchResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SearchResult::not_equal(Self, Self) -> Bool
+pub fn SearchResult::to_json(Self) -> Json
+pub fn SearchResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Section {
   id : String

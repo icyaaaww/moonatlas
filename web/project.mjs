@@ -52,7 +52,7 @@ export function shareHTML(template, project) {
   return '<!DOCTYPE html>\n' + template.replace(/^<!DOCTYPE html>\s*/i, '').replace(/(<script id="moonatlas-seed" type="application\/json">)[\s\S]*?(<\/script>)/, (_, open, close) => open + escaped + close);
 }
 
-export async function readDocuments(files) {
+export async function readDocuments(files, {signal,onProgress=()=>{}} = {}) {
   const selected = Array.from(files);
   const accepted = selected.filter(f => /\.(md|txt)$/i.test(f.name));
   if (!accepted.length) throw new Error('请选择 UTF-8 编码的 .md 或 .txt 文档');
@@ -61,6 +61,7 @@ export async function readDocuments(files) {
   const paths = new Set();
   const docs = [];
   for (const file of accepted) {
+    signal?.throwIfAborted();
     // A selected folder is the knowledge-base root, not part of document identity.
     const path = file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(1).join('/') : file.name;
     if (paths.has(path)) throw new Error(`导入文件重名：${path}。请使用“导入文件夹”保留目录结构`);
@@ -69,7 +70,18 @@ export async function readDocuments(files) {
     try { content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); }
     catch { throw new Error(`${path} 不是有效 UTF-8 文本，请先转换编码`); }
     docs.push({ path, content });
+    onProgress(docs.length,accepted.length,path);
+    await new Promise(resolve=>setTimeout(resolve,0));
   }
+  signal?.throwIfAborted();
   build({ ...emptyProject(), documents: docs });
-  return { documents: docs, skipped: selected.length - accepted.length };
+  return { documents: docs, skipped: selected.length - accepted.length, skippedFiles:selected.filter(f=>!/\.(md|txt)$/i.test(f.name)).map(f=>f.webkitRelativePath || f.name) };
+}
+
+export function planImport(project,documents,replace=false) {
+  const merged=new Map(project.documents.map(d=>[d.path,d]));documents.forEach(d=>merged.set(d.path,d));
+  const next=replaceDocuments(project,replace?documents:Array.from(merged.values()));
+  const changes=core('compare',{before:project.documents,after:next.documents});
+  const unchanged=documents.filter(d=>project.documents.some(old=>old.path===d.path&&old.content===d.content)).map(d=>d.path);
+  return {next,changes,unchanged};
 }

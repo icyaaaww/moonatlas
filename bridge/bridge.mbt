@@ -49,6 +49,32 @@ pub fn dispatch(input : String) -> String {
         }
         @atlas.diff_lines(before, after).to_json()
       }
+      {
+        "action": "search",
+        "documents": docs,
+        "preferences": prefs,
+        "query": String(query),
+        ..
+      } =>
+        @atlas.search_documents(
+          @json.from_json(docs),
+          @json.from_json(prefs),
+          query,
+        ).to_json()
+      {
+        "action": "classify",
+        "documents": docs,
+        "preferences": prefs,
+        "paths": paths,
+        "topic": String(topic),
+        ..
+      } =>
+        @atlas.classify_documents(
+          @json.from_json(docs),
+          @json.from_json(prefs),
+          @json.from_json(paths),
+          topic,
+        ).to_json()
       { "action": "sections", "before": before, "after": after, .. } =>
         @atlas.compare_sections(@json.from_json(before), @json.from_json(after)).to_json()
       { "action": "compare", "before": before, "after": after, .. } =>

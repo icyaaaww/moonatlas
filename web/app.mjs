@@ -1,4 +1,5 @@
-import { core, build, emptyProject, replaceDocuments, parseProject, projectJSON, shareHTML, readDocuments, validateReviews } from './project.mjs';
+import { core, build, emptyProject, replaceDocuments, parseProject, projectJSON, shareHTML, readDocuments, validateReviews, planImport } from './project.mjs';
+import {backupJSON,readBackup,canonicalProject} from './backup.mjs';
 import { reviewFor, reviewNames, checkNames, maintenanceReport } from './maintenance.mjs';
 import { sampleDocuments } from './samples.mjs';
 import { maintenanceSample } from './maintenance-sample.mjs';
@@ -17,6 +18,9 @@ const store = new LocalDraft(globalThis.indexedDB,location.pathname);
 let draftStatus='off', draftRecord=null, diffSelection=null, updateCache=[], sectionCache=new Map(), mutation=0;
 let healthCache=[], impactCache=[], healthFilter='pending', healthKind='all', healthPage=0;
 const lineCache=new Map();
+let homeVisible=false, modalSerial=0, importController=null, ioSerial=0, backupState=null, pendingSwitch=null, searchCache=null, searchPage=0;
+const selectedDocuments=new Set(),selectedChecks=new Set();
+let batchMode=false;
 const writer = new DraftWriter(store,(status,value)=>{
   draftStatus=status;
   if(status==='saved')draftRecord=value;
@@ -47,12 +51,15 @@ function toast(message, error = false) {
 }
 function fail(error) { toast(error.message || String(error), true); }
 function modal(title, description, controls = [], fields = []) {
+  const serial=++modalSerial;
   const dialog = $('modal');
   if (dialog.open) dialog.close();
   $('modal-content').replaceChildren(node('h2', '', title), node('p', '', description), ...fields);
-  $('modal-actions').replaceChildren(button('取消', () => dialog.close()));
+  $('modal-actions').replaceChildren(button('取消', () => {pendingSwitch=null;dialog.close();}));
   for (const [label, fn, cls] of controls) $('modal-actions').append(button(label, async () => {
-    try { const result = await fn(); if (result !== false) dialog.close(); } catch (error) { fail(error); }
+    const buttons=Array.from($('modal-actions').querySelectorAll('button'));buttons.forEach(b=>b.disabled=true);
+    try { const result = await fn(); if (result !== false && serial===modalSerial) dialog.close(); } catch (error) { fail(error); }
+    finally {if(serial===modalSerial)buttons.forEach(b=>b.disabled=false);}
   }, cls));
   dialog.showModal();
 }
@@ -62,7 +69,7 @@ function field(label, value, maxLength = 200) {
 function guardUnsaved(action) {
   if (!dirty && !writer.enabled) return action();
   modal('离开当前资料集？', writer.enabled?'本机自动保存只保留一个当前草稿。切换资料集会替换这份草稿，并清空当前窗口的撤销记录。建议先下载项目备份。':'当前窗口有尚未下载保存的整理。你可以先保存项目文件，再继续。', [
-    ['先保存项目', () => { save(); action(); }, 'primary'], ['放弃当前更改', action, 'danger'],
+    ['备份并验证后继续', async () => { const stamp=mutation;await save();pendingSwitch={action,mutation:stamp};showBackup();return false; }, 'primary'], ['放弃当前更改', action, 'danger'],
   ]);
 }
 function renderSession(){
@@ -70,6 +77,8 @@ function renderSession(){
   const text={off:'本机自动保存：未开启',pending:'正在保存到本机…',saved:'已保存到本机 ✓',error:'本机保存已暂停 · 查看'};
   $('local-save').textContent=text[draftStatus];$('local-save').dataset.status=draftStatus;
   $('local-save').title=draftStatus==='saved'?'浏览器草稿；请定期下载项目备份':'点击管理本机草稿与自动保存';
+  $('save-status').textContent=(draftStatus==='saved'&&draftRecord?`本机保存于 ${new Date(draftRecord.updatedAt).toLocaleTimeString()} · `:'')+
+    (backupState?.mutation===mutation?(backupState.verified?'当前资料已验证备份':'已发起备份下载，待选回文件验证'):project.documents.length&&!demo?'当前资料需要备份':'原文保留在本机');
 }
 function stepHistory(direction){
   try{
@@ -93,7 +102,9 @@ function offerDraft(record){
   ]);
 }
 async function restoreDraft(record){
-  const restored=parseProject(JSON.stringify(record.project));
+  let restored;
+  try{restored=parseProject(JSON.stringify(record.project));}
+  catch(error){modal('草稿暂时无法恢复',`校验未通过：${error.message}。当前项目保持不变，可改用之前下载的项目备份。`,[['打开项目备份',()=>$('project-input').click()]]);return false;}
   await writer.stop();writer.enable(record.revision);draftRecord=record;
   selection=null;expanded.clear();adopt(restored,{changed:false,reset:true});
   await writer.tail;
@@ -196,16 +207,20 @@ function adopt(next, { sample = false, changed = true, remember = true, reset = 
   const graph = build(next);
   const findings=core('health',next),ids=new Set(findings.map(c=>c.id));
   next={...next,reviews:validateReviews(next.reviews).filter(r=>ids.has(r.id))};
+  const updates=core('compare',{before:next.baseline,after:next.documents});
+  const impacts=core('impacts',{before:next.baseline,after:next.documents});
+  if(impacts.issues.length)throw new Error(impacts.issues.map(i=>i.message).join('\n'));
   if(reset){history.clear();mapState.focus=null;mapState.collapsed.clear();mapState.scrollTop=0;mapState.scrollLeft=0;}
   else if(remember && atlas && JSON.stringify(project)!==JSON.stringify(next)){
     if(!history.push({project,demo}))toast('本次资料超过撤销缓存上限，请先下载项目备份');
   }
   const previousContent = selection && project.documents.find(d=>d.path===selection.path)?.content;
   project = next; atlas = graph; demo = sample; dirty = changed;
-  mutation++;diffSelection=null;sectionCache.clear();lineCache.clear();healthPage=0;
+  mutation++;diffSelection=null;sectionCache.clear();lineCache.clear();healthPage=0;searchCache=null;searchPage=0;selectedDocuments.clear();selectedChecks.clear();homeVisible=false;
+  if(reset){query='';$('search').value='';backupState=null;pendingSwitch=null;}
   healthCache=findings;
-  updateCache=core('compare',{before:project.baseline,after:project.documents});
-  impactCache=core('impacts',{before:project.baseline,after:project.documents}).impacts;
+  updateCache=updates;
+  impactCache=impacts.impacts;
   if(mapState.focus && !atlas.pages.some(p=>p.topic===mapState.focus))mapState.focus=null;
   if (selection && !project.documents.some(d => d.path === selection.path)) selection = null;
   if (selection && previousContent !== project.documents.find(d=>d.path===selection.path)?.content) {
@@ -236,6 +251,9 @@ function select(path, start = 1, end = 1) {
   if (matchMedia('(max-width:950px)').matches) $('detail').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 function render() {
+  $('welcome').hidden=!homeVisible;
+  document.querySelector('.intro').hidden=homeVisible;document.querySelector('.workspace').hidden=homeVisible;
+  $('getting-started').hidden=homeVisible || !project.documents.length;
   renderSession();
   const [title, description, label, hint] = titles[view];
   $('view-title').replaceChildren(document.createTextNode(title), node('span','','。'));
@@ -265,6 +283,15 @@ function renderView() {
   $('footer-info').textContent = query ? '正在筛选 · 清空搜索可查看完整资料集' : '标题与目录线索 · 可人工调整 · 不代表语义推断';
 }
 function renderMap(host) {
+  if(query)renderSearch(host);
+  const bulk=node('div','batch-toolbar');
+  bulk.append(button(batchMode?'结束多选': '批量分类',()=>{batchMode=!batchMode;selectedDocuments.clear();renderView();}));
+  if(batchMode){
+    const visible=atlas.pages.filter(p=>matches(p)&&(!mapState.focus||p.topic===mapState.focus));
+    bulk.append(button('选择当前结果',()=>{visible.forEach(p=>selectedDocuments.add(p.path));renderView();}),button('清空选择',()=>{selectedDocuments.clear();renderView();}),node('span','',`已选 ${selectedDocuments.size} 篇`));
+    const apply=button('设置共同主题',batchClassify,'primary');apply.disabled=!selectedDocuments.size;bulk.append(apply);
+  }
+  host.append(bulk);
   host.append(mapControls(mapState,renderView));
   const pages = atlas.pages.filter(p=>matches(p) && (!mapState.focus || p.topic===mapState.focus));
   if (!pages.length) {
@@ -285,6 +312,7 @@ function renderMap(host) {
     list.hidden=mapState.collapsed.has(topic);
     for (const p of docs) {
       const card = node('div','doc-node' + (selection?.path === p.path ? ' selected' : '')); card.dataset.path = p.path;
+      if(batchMode){const label=node('label','doc-select'),check=node('input');check.type='checkbox';check.checked=selectedDocuments.has(p.path);check.setAttribute('aria-label',`选择文档 ${p.path}`);check.addEventListener('change',()=>{if(check.checked)selectedDocuments.add(p.path);else selectedDocuments.delete(p.path);renderView();});label.append(check);card.append(label);}
       const open = button('', () => select(p.path), 'doc-open'); open.title = p.path;
       const changed=changes().find(c=>c.path===p.path);
       open.append(node('span','file-icon','▧'),node('span','doc-title',p.title),node('span','node-meta',p.sections.length ? `${p.sections.length} 标题` : '纯文本'));
@@ -311,6 +339,59 @@ function renderMap(host) {
 }
 function sourceButton(path, line = 1, end = line, label = path) {
   const b = button('', () => select(path,line,end), 'source-link'); b.append(node('span','',label),node('small','',`L${line}${end > line ? '–'+end : ''} ↗`)); return b;
+}
+function highlighted(text,term=query){
+  const fragment=document.createDocumentFragment();
+  if(!term){fragment.append(document.createTextNode(text));return fragment;}
+  const expression=new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu');let start=0;
+  for(const match of text.matchAll(expression)){
+    fragment.append(document.createTextNode(text.slice(start,match.index)),node('mark','search-mark',match[0]));start=match.index+match[0].length;
+  }
+  fragment.append(document.createTextNode(text.slice(start)));return fragment;
+}
+function renderSearch(host){
+  if(!searchCache||searchCache.query!==query){searchCache={query,...core('search',{...project,query})};searchPage=0;}
+  const box=node('section','search-results');box.setAttribute('aria-label','搜索结果');
+  box.append(node('div','section-label',`找到 ${searchCache.total} 个位置${searchCache.total>200?' · 展示前 200 个，请缩小关键词':''}`));
+  if(searchCache.issues.length)box.append(node('p','',searchCache.issues.map(i=>i.message).join('；')));
+  for(const hit of searchCache.hits.slice(searchPage*10,searchPage*10+10)){
+    const b=button('',()=>{
+      const p=atlas.pages.find(p=>p.path===hit.path);mapState.focus=null;mapState.collapsed.delete(p.topic);expanded.add(hit.path);mapState.scrollTop=0;
+      renderView();select(hit.path,Math.max(1,hit.line),Math.max(1,hit.line));
+      requestAnimationFrame(()=>{
+        const card=Array.from(document.querySelectorAll('.doc-node')).find(n=>n.dataset.path===hit.path);
+        card?.scrollIntoView({block:'nearest',inline:'nearest'});
+        if(matchMedia('(max-width:950px)').matches)$('detail').scrollIntoView({block:'start'});
+      });
+    },'search-result');
+    b.append(node('strong','',`${hit.path} · ${hit.line?'L'+hit.line:'标题 / 路径 / 分类 / 标签'}`));const snippet=node('span','search-snippet');snippet.append(highlighted(hit.snippet));b.append(snippet);box.append(b);
+  }
+  if(searchCache.hits.length>10){const controls=node('div','pagination'),prev=button('上一页结果',()=>{searchPage--;renderView();}),next=button('下一页结果',()=>{searchPage++;renderView();});prev.disabled=searchPage===0;next.disabled=(searchPage+1)*10>=searchCache.hits.length;controls.append(prev,node('span','',`${searchPage+1}/${Math.ceil(searchCache.hits.length/10)}`),next);box.append(controls);}
+  host.append(box);
+}
+function batchClassify(){
+  const paths=Array.from(selectedDocuments),stamp=mutation;
+  const [wrap,input]=field('共同主题','',120),list=node('div','preview-list');paths.forEach(path=>list.append(node('div','',path)));
+  modal(`批量分类 ${paths.length} 篇文档`,'保留每篇文档的显示名称和原文。确认后可以一步撤销。',[
+    ['确认批量分类',()=>{
+      if(stamp!==mutation)throw new Error('资料已经变化，请重新选择。');
+      const result=core('classify',{...project,paths,topic:input.value.trim()});if(result.issues.length)throw new Error(result.issues.map(i=>i.message).join('\n'));
+      adopt({...project,preferences:result.preferences},{sample:demo});toast(`已分类 ${paths.length} 篇文档，可撤销`);
+    },'primary'],
+  ],[wrap,list]);
+}
+function batchReview(state){
+  const ids=Array.from(selectedChecks),stamp=mutation;
+  const [wrap,input]=field(state==='ignored'?'共同忽略原因（必填）':'共同处理备注（可选）','',1000);
+  const list=node('div','preview-list');healthCache.filter(c=>selectedChecks.has(c.id)).forEach(c=>list.append(node('div','',`${checkNames[c.kind]} · ${c.paths.join('、')}${c.kind==='link'?' L'+c.line+' → '+c.target:''}`)));
+  modal(`批量${state==='ignored'?'忽略':'处理'} ${ids.length} 项`,'下面列出本次范围。只改变处理记录，可一步撤销。',[
+    ['确认批量处理',()=>{
+      if(stamp!==mutation)throw new Error('资料已经变化，请重新选择。');
+      if(state==='ignored'&&!input.value.trim())throw new Error('请填写共同忽略原因');
+      const reviews=validateReviews([...(project.reviews||[]).filter(r=>!ids.includes(r.id)),...ids.map(id=>({id,state,note:input.value.trim(),reopened:false}))]);
+      adopt({...project,reviews},{sample:demo});toast(`已记录 ${ids.length} 项处理结果，可撤销`);
+    },'primary'],
+  ],[wrap,list]);
 }
 function renderConcepts(host) {
   const wrap = node('div','cards');
@@ -354,10 +435,13 @@ function renderOrganize(host) {
     return (healthFilter==='all'||r.state===healthFilter) && (healthKind==='all'||c.kind===healthKind) && (!query || `${c.target} ${r.note}`.toLowerCase().includes(query) || c.paths.some(path=>matches(atlas.pages.find(p=>p.path===path))));
   });
   healthPage=Math.min(healthPage,Math.max(0,Math.ceil(items.length/30)-1));
+  const bulk=node('div','batch-toolbar');bulk.append(button('选择本页任务',()=>{items.slice(healthPage*30,healthPage*30+30).forEach(c=>selectedChecks.add(c.id));renderView();}),button('清空任务选择',()=>{selectedChecks.clear();renderView();}),node('span','',`已选 ${selectedChecks.size} 项（含其他页）`));
+  for(const [label,state] of [['批量标记已处理','done'],['批量忽略','ignored']]){const b=button(label,()=>batchReview(state));b.disabled=!selectedChecks.size;bulk.append(b);}wrap.append(bulk);
   for(const check of items.slice(healthPage*30,healthPage*30+30)){
     const r=reviewFor(project,check),card=node('div','card health-card');card.dataset.kind=check.kind;
     const title=check.kind==='link'?check.target:check.kind==='duplicate'?`${check.paths.length} 份相同资料`:atlas.pages.find(p=>p.path===check.paths[0]).title;
     const header=node('div','card-row');header.append(node('div','issue-title',checkNames[check.kind]),node('span','review-state '+r.state,reviewNames[r.state]));
+    const choice=node('label','task-select'),checkbox=node('input');checkbox.type='checkbox';checkbox.checked=selectedChecks.has(check.id);checkbox.setAttribute('aria-label',`选择任务 ${checkNames[check.kind]} ${check.paths[0]} L${check.line}`);checkbox.addEventListener('change',()=>{if(checkbox.checked)selectedChecks.add(check.id);else selectedChecks.delete(check.id);renderView();});choice.append(checkbox,node('span','','选择此项'));card.append(choice);
     card.append(header,node('h3','',title),node('p','',check.kind==='link'?`${statusNames[check.status]}。只核对当前资料集，未导入也可能触发提示。`:check.kind==='duplicate'?'完整原文逐字相同；请核实是否因用途不同而需要保留。':'点击原文，在右侧设置所属主题。'));
     check.paths.forEach(path=>card.append(sourceButton(path,check.line)));
     if(r.reopened)card.append(node('div','notice','原文已变化，请重新核对。之前的备注已保留。'));
@@ -448,7 +532,7 @@ function renderDetail() {
   const body=node('div','detail-body'); const label=node('div','section-label','原文定位'); label.append(node('span','muted',`L${selection.start}–${selection.end}`)); body.append(label);
   const lines=doc.content.split('\n'); const maxPage=Math.max(0,Math.ceil(lines.length/100)-1); sourcePage=Math.min(sourcePage,maxPage);
   const source=node('div','source'); const offset=sourcePage*100;
-  lines.slice(offset,offset+100).forEach((text,i)=>{ const n=offset+i+1; const row=node('div','source-line'+(n>=selection.start && n<=selection.end?' highlight':'')); row.append(node('span','line-no',String(n)),node('span','line-text',text || ' ')); source.append(row); }); body.append(source);
+  lines.slice(offset,offset+100).forEach((text,i)=>{ const n=offset+i+1; const row=node('div','source-line'+(n>=selection.start && n<=selection.end?' highlight':''));const content=node('span','line-text');content.append(highlighted(text||' ')); row.append(node('span','line-no',String(n)),content); source.append(row); }); body.append(source);
   if(maxPage>0) {
     const pagination=node('div','pagination'); const prev=button('上一页',()=>{sourcePage--;renderDetail();}); prev.disabled=sourcePage===0; const next=button('下一页',()=>{sourcePage++;renderDetail();}); next.disabled=sourcePage===maxPage;
     pagination.append(prev,node('span','',`${sourcePage+1}/${maxPage+1} · ${lines.length} 行`),next); body.append(pagination);
@@ -471,27 +555,74 @@ function renderDetail() {
   requestAnimationFrame(()=>source.querySelector('.highlight')?.scrollIntoView({block:'nearest'}));
 }
 async function importFiles(files) {
+  importController?.abort();const controller=new AbortController();importController=controller;
+  const serial=++ioSerial,stamp=mutation;let reading=true;
+  const progress=node('div','import-progress','准备读取…');progress.setAttribute('role','status');
+  modal('正在读取资料','文件只在本机读取。完成预览并确认后，才会更新当前项目。',[],[progress]);
+  const onClose=()=>{if(reading&&!$('modal').open)controller.abort();};$('modal').addEventListener('close',onClose);
   try {
-    const {documents,skipped}=await readDocuments(files);
-    const apply=(replace)=>{
-      const base=demo?emptyProject():project;
-      let docs=documents;
-      if(!replace) {const map=new Map(base.documents.map(d=>[d.path,d])); documents.forEach(d=>map.set(d.path,d));docs=Array.from(map.values());}
-      let next=replaceDocuments(base,docs);
-      if(demo || (!base.documents.length && !base.baseline.length && !base.preferences.length))next={...next,baseline:structuredClone(docs)};
-      adopt(next);toast(`已导入 ${documents.length} 篇文档${skipped?`，跳过 ${skipped} 个非 Markdown/TXT 文件`:''}`);
+    const {documents,skipped,skippedFiles}=await readDocuments(files,{signal:controller.signal,onProgress:(done,total,path)=>{progress.textContent=`已读取 ${done} / ${total} · ${path}`;}});
+    reading=false;
+    if(serial!==ioSerial||controller.signal.aborted)return;
+    if(stamp!==mutation)throw new Error('读取期间当前项目已变化，请重新选择文件并预览。');
+    const base=demo?emptyProject():project;
+    const wrapper=node('div','import-preview'),label=node('label','field','导入方式'),mode=node('select');
+    mode.setAttribute('aria-label','导入方式');
+    for(const [value,text] of [['merge','合并新增 / 更新'],['replace','以本次文件替换资料集']]){const option=node('option','',text);option.value=value;mode.append(option);}
+    label.append(mode);wrapper.append(label);
+    const summary=node('div','notice'),list=node('div','preview-list'),ackLabel=node('label','removal-confirm'),ack=node('input');ack.type='checkbox';ackLabel.append(ack,document.createTextNode('我已核对移出列表'));
+    wrapper.append(summary,list,ackLabel);let plan=null;
+    const draw=()=>{
+      plan=null;ack.checked=false;list.replaceChildren();ackLabel.hidden=true;
+      try{
+        plan=planImport(base,documents,mode.value==='replace');
+        const counts=Object.fromEntries(['added','updated','removed','renamed'].map(kind=>[kind,plan.changes.filter(c=>c.kind===kind).length]));
+        summary.textContent=`新增 ${counts.added} · 覆盖修改 ${counts.updated} · 移出 ${counts.removed} · 重命名 ${counts.renamed} · 内容未变 ${plan.unchanged.length} · 跳过 ${skipped}。确认后共 ${plan.next.documents.length} 篇。`;
+        for(const c of plan.changes)list.append(node('div','preview-row',`${c.kind==='removed'?'移出':kindNames[c.kind]} · ${c.previous_path?c.previous_path+' → ':''}${c.path}`));
+        for(const path of plan.unchanged)list.append(node('div','preview-row',`未变 · ${path}`));
+        for(const path of skippedFiles)list.append(node('div','preview-row skipped',`跳过 · ${path}（仅支持 Markdown/TXT）`));
+        ackLabel.hidden=counts.removed===0;
+      }catch(error){summary.textContent=error.message;list.append(node('p','','可以尝试切换导入方式或减少文件数量。'));}
+      const confirm=$('modal-actions').querySelector('.primary');if(confirm)confirm.disabled=!plan;
     };
-    if(demo || !project.documents.length) {apply(true);return;}
-    const collisions=documents.filter(d=>project.documents.some(p=>p.path===d.path)).length;
-    modal('如何更新当前资料集？',`本次导入 ${documents.length} 篇文档，其中 ${collisions} 篇路径与当前资料相同。合并时，同路径原文将被替换；替换资料集时，未在本次选中的文档会移出当前项目。`,[
-      ['合并新增 / 更新',()=>apply(false),'primary'],['以本次文件替换资料集',()=>apply(true)],
-    ]);
-  }catch(error){fail(error);}
+    modal('导入预览',demo?'将用你选择的资料替换当前示例。请核对文件列表，源文件不会被修改。':'合并保留未选中的文档；完整替换会将未选中文档移出项目。所有变更可一步撤销，源文件不会被修改。',[
+      ['确认导入',()=>{
+        if(stamp!==mutation||serial!==ioSerial)throw new Error('预览已经过期，请重新导入。');
+        if(!plan)throw new Error('请先解决预览中的问题');
+        if(!ackLabel.hidden&&!ack.checked)throw new Error('请勾选确认，核对即将移出的文档。');
+        let next=plan.next;
+        if(demo||(!base.documents.length&&!base.baseline.length&&!base.preferences.length))next={...next,baseline:structuredClone(next.documents)};
+        adopt(next);toast(`已导入 ${documents.length} 篇，跳过 ${skipped} 个不支持的文件。可在本机保存或下载备份。`);
+      },'primary'],
+    ],[wrapper]);mode.addEventListener('change',draw);draw();
+  }catch(error){
+    if(serial===ioSerial&&!controller.signal.aborted){reading=false;modal('导入未完成',`${error.message}\n当前资料未被修改，请修正后重新选择。`);fail(error);}
+  }finally{reading=false;$('modal').removeEventListener('close',onClose);}
 }
 function download(name, text, type) {
   const url=URL.createObjectURL(new Blob([text],{type}));const link=node('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-function save() {download('MoonAtlas-project.json',projectJSON(project),'application/json');dirty=false;$('save-project').textContent='保存项目';toast('已发起项目下载；下次使用“打开项目文件”恢复');}
+async function save() {
+  const snapshot=structuredClone(project),stamp=mutation;
+  const text=await backupJSON(snapshot);
+  download('MoonAtlas-project.json',text,'application/json');
+  if(stamp===mutation)backupState={mutation:stamp,verified:false,time:new Date().toISOString()};
+  renderSession();toast('已发起备份下载。请确认文件落盘，再点击“备份与恢复”选回文件验证。');
+}
+function showBackup(){
+  const info=node('div','notice',backupState?.mutation===mutation?(backupState.verified?'当前项目的备份文件已验证一致。':'已发起下载，尚未验证文件是否完整落盘。'):'当前项目尚无已验证的备份。');
+  const status=node('p','hint',draftStatus==='saved'&&draftRecord?`本机草稿保存于 ${new Date(draftRecord.updatedAt).toLocaleString()}`:'本机草稿与下载备份相互独立。');
+  modal('备份与恢复','备份包含原文、基线、分类、归并和处理记录。选回文件后校验内容并尝试重建项目；验证不会替换当前资料。校验值检测意外损坏，不是来源真实性证明。',[
+    ['下载完整备份',async()=>{await save();showBackup();return false;},'primary'],
+    ['选回文件验证',()=>{$('verify-input').click();return false;}],
+    ['打开备份恢复',()=>{pendingSwitch=null;$('project-input').click();}],
+  ],[info,status]);
+}
+async function readProjectFile(file){
+  if(file.size>30000000)throw new Error('项目文件过大，最多 30 MB');
+  let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());}catch{throw new Error(`${file.name} 不是有效 UTF-8 项目文件`);}
+  return readBackup(text);
+}
 async function exportStandalone() {
   let source=template;
   if(needsOfflineTemplate) {
@@ -508,7 +639,7 @@ function showExport() {
     ['交互 HTML · 含原文',exportStandalone,'primary'],
   ]);
 }
-document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;render();}));
+document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{homeVisible=false;view=b.dataset.view;selectedDocuments.clear();selectedChecks.clear();render();}));
 $('undo').addEventListener('click',()=>stepHistory('undo'));
 $('redo').addEventListener('click',()=>stepHistory('redo'));
 $('local-save').addEventListener('click',()=>manageDraft().catch(fail));
@@ -519,16 +650,46 @@ document.addEventListener('keydown',e=>{
 });
 let resizeTimer;
 window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(view==='map')renderView();},100);});
-$('search').addEventListener('input',e=>{query=e.target.value.toLocaleLowerCase().trim();renderView();});
+$('search').addEventListener('input',e=>{query=e.target.value.toLocaleLowerCase().trim();selectedDocuments.clear();selectedChecks.clear();renderView();renderDetail();});
 $('import-files').addEventListener('click',()=>$('files-input').click());
 $('import-folder').addEventListener('click',()=>$('folder-input').click());
 for(const id of ['files-input','folder-input'])$(id).addEventListener('change',async e=>{const selected=Array.from(e.target.files);e.target.value='';await importFiles(selected);});
 $('open-project').addEventListener('click',()=>$('project-input').click());
 $('project-input').addEventListener('change',async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{if(f.size>30000000)throw new Error('项目文件过大');const next=parseProject(new TextDecoder('utf-8',{fatal:true}).decode(await f.arrayBuffer()));guardUnsaved(()=>{selection=null;expanded.clear();adopt(next,{changed:false,reset:true});toast('项目已恢复，包括分类、归并规则和基线');});}catch(error){fail(error);}
+  const serial=++ioSerial,stamp=mutation;
+  try{
+    const result=await readProjectFile(f);if(serial!==ioSerial)return;if(stamp!==mutation)throw new Error('读取期间项目已变化，请重新打开备份。');
+    const same=canonicalProject(result.project)===canonicalProject(project);
+    const apply=()=>{selection=null;expanded.clear();adopt(result.project,{changed:false,reset:true});backupState={mutation,verified:true,time:new Date().toISOString()};renderSession();toast(result.verified?'备份校验通过，项目已恢复':'旧版项目已校验并恢复；建议下载新版带校验值的备份');};
+    if(same)apply();else guardUnsaved(apply);
+  }catch(error){modal('项目未恢复',`${error.message}\n当前项目保持不变，可选择其他备份或取消继续工作。`,[['重新选择备份',()=>$('project-input').click()]]);fail(error);}
 });
-$('save-project').addEventListener('click',save);$('export-menu').addEventListener('click',showExport);
+$('verify-input').addEventListener('change',async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;const stamp=mutation,serial=++ioSerial;
+  try{
+    const result=await readProjectFile(f);if(serial!==ioSerial)return;if(stamp!==mutation)throw new Error('验证期间项目已变化，请重新验证。');
+    const same=canonicalProject(result.project)===canonicalProject(project);
+    if(same){backupState={mutation,verified:true,time:new Date().toISOString()};dirty=false;$('save-project').textContent='保存项目';renderSession();}
+    if(same&&pendingSwitch?.mutation===mutation){const action=pendingSwitch.action;pendingSwitch=null;$('modal').close();action();return;}
+    pendingSwitch=null;
+    modal(same?'备份验证通过':'文件可恢复，但与当前项目不同',`${result.verified?'校验值一致，项目重建成功。':'旧版文件不含校验值，结构校验和项目重建成功。'}\n${result.project.documents.length} 篇文档，${result.project.preferences.length} 条分类，${result.project.reviews.length} 条处理记录。\n${same?'文件与当前项目的原文、基线和整理记录一致。':'当前项目未被替换，也未标记为已备份。请下载当前项目再验证。'}`);
+  }catch(error){pendingSwitch=null;modal('备份验证未通过',`${error.message}\n当前项目保持不变。请检查是否选错文件，或重新下载备份。`);fail(error);}
+});
+$('save-project').addEventListener('click',()=>save().catch(fail));$('export-menu').addEventListener('click',showExport);
+$('backup-center').addEventListener('click',()=>{pendingSwitch=null;showBackup();});
+$('modal').addEventListener('cancel',()=>{pendingSwitch=null;});
+$('show-home').addEventListener('click',()=>{homeVisible=true;render();});
+$('start-import').addEventListener('click',()=>$('files-input').click());
+$('start-open').addEventListener('click',()=>$('project-input').click());
+$('start-demo').addEventListener('click',()=>guardUnsaved(loadDemo));
+$('start-continue').addEventListener('click',async()=>{
+  if(project.documents.length){homeVisible=false;render();return;}
+  try{const record=await store.read();if(record)offerDraft(record);else modal('继续上次整理','这一路径下没有本机草稿。可以选择之前下载的项目 JSON 恢复。',[['打开项目备份',()=>$('project-input').click()]]);}catch(error){fail(error);}
+});
+$('guide-search').addEventListener('click',()=>{homeVisible=false;view='map';selectedDocuments.clear();selectedChecks.clear();render();$('search').focus();});
+$('guide-organize').addEventListener('click',()=>{view='organize';render();});
+$('guide-backup').addEventListener('click',()=>showBackup());
 $('load-demo').addEventListener('click',()=>guardUnsaved(loadDemo));
 $('load-maintenance-demo').addEventListener('click',()=>guardUnsaved(()=>{
   selection=null;expanded.clear();view='organize';healthFilter='pending';healthKind='all';
@@ -545,6 +706,6 @@ document.addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(
 document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').hidden=true;if(e.dataTransfer?.files.length)importFiles(e.dataTransfer.files);});
 try {
   const seed=$('moonatlas-seed').textContent.trim();
-  if(seed && seed!=='null')adopt(parseProject(seed),{changed:false,reset:true});else loadDemo();
+  if(seed && seed!=='null')adopt(parseProject(seed),{changed:false,reset:true});else {adopt(emptyProject(),{changed:false,reset:true});homeVisible=true;render();}
   checkDraftAtStartup();
 }catch(error){adopt(emptyProject(),{changed:false});fail(error);}

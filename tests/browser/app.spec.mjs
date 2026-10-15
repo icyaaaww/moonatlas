@@ -1,9 +1,10 @@
+import {importFiles} from './helpers.mjs';
 import {test,expect} from '@playwright/test';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {readFile} from 'node:fs/promises';
 const app=pathToFileURL(fileURLToPath(new URL('../../dist/MoonAtlas.html',import.meta.url))).href;
 const fixture=(name,text)=>({name,mimeType:'text/plain',buffer:Buffer.from(text)});
-test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);});
+test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);await page.locator('#start-demo').click();});
 
 test('offline map, outline and exact line evidence work without network',async({page})=>{
   const remote=[];page.on('request',r=>{if(/^https?:/.test(r.url()))remote.push(r.url());});
@@ -16,7 +17,7 @@ test('offline map, outline and exact line evidence work without network',async({
   await page.screenshot({path:'test-results/desktop-map.png',fullPage:true});
 });
 test('classification and exact source survive save and reopen',async({page})=>{
-  await page.locator('#files-input').setInputFiles(fixture('notes.md','# Reading\n## Evidence\nLiteral content'));
+  await importFiles(page,fixture('notes.md','# Reading\n## Evidence\nLiteral content'));
   await page.locator('.doc-open').click();
   await page.getByLabel('所属主题').fill('我的阅读');await page.getByLabel('显示名称').fill('整理后的标题');
   await page.getByRole('button',{name:'保存整理',exact:true}).click();
@@ -24,15 +25,15 @@ test('classification and exact source survive save and reopen',async({page})=>{
   const downloaded=page.waitForEvent('download');await page.locator('#save-project').click();const download=await downloaded;
   const file=await download.path(); const saved=JSON.parse(await readFile(file,'utf8'));
   expect(saved.documents[0].content).toContain('# Reading');expect(saved.preferences[0].title).toBe('整理后的标题');
-  await page.locator('#new-project').click();await expect(page.locator('.doc-node')).toHaveCount(0);
+  await page.locator('#verify-input').setInputFiles(file);await expect(page.getByRole('heading',{name:'备份验证通过',exact:true})).toBeVisible();await page.getByRole('button',{name:'取消',exact:true}).click();await page.locator('#new-project').click();await expect(page.locator('.doc-node')).toHaveCount(0);
   await page.locator('#project-input').setInputFiles(file);
   await expect(page.locator('.doc-open')).toContainText('整理后的标题');
 });
 test('snapshot replacement recognizes rename and keeps classification',async({page})=>{
-  await page.locator('#files-input').setInputFiles(fixture('old.md','# Same\nBody'));
+  await importFiles(page,fixture('old.md','# Same\nBody'));
   await page.locator('.doc-open').click();await page.getByLabel('所属主题').fill('自定义主题');await page.getByRole('button',{name:'保存整理',exact:true}).click();
-  await page.locator('#files-input').setInputFiles(fixture('new.md','# Same\nBody'));
-  await page.getByRole('button',{name:'以本次文件替换资料集',exact:true}).click();
+  await importFiles(page,fixture('new.md','# Same\nBody'),'replace');
+
   await expect(page.locator('.topic-label')).toContainText('自定义主题');
   await page.locator('[data-view="changes"]').click();
   await expect(page.locator('.change-kind')).toHaveText('重命名');
@@ -49,7 +50,7 @@ test('explicit aliases add cross-document concept and show both sources',async({
 });
 test('offline HTML export reopens hostile source as literal text',async({page,context})=>{
   const text='# <img src=x onerror="globalThis.pwned=true">\n</script><script>globalThis.pwned=true</script>';
-  await page.locator('#files-input').setInputFiles(fixture('unsafe.md',text));
+  await importFiles(page,fixture('unsafe.md',text));
   await page.locator('#export-menu').click();
   const pending=page.waitForEvent('download');await page.getByRole('button',{name:'交互 HTML · 含原文',exact:true}).click();const download=await pending;
   const saved='test-results/shared.html';await download.saveAs(saved);
@@ -66,11 +67,11 @@ test('invalid project and invalid UTF8 leave existing knowledge base intact',asy
   await expect(page.locator('#toast')).toContainText('不是有效 UTF-8');await expect(page.locator('.doc-node')).toHaveCount(8);
 });
 test('updating a selected heading relocates evidence by stable section identity',async({page})=>{
-  await page.locator('#files-input').setInputFiles(fixture('note.md','# Title\n## Stable\nOriginal'));
+  await importFiles(page,fixture('note.md','# Title\n## Stable\nOriginal'));
   await page.getByRole('button',{name:'展开 Title 的标题',exact:true}).click();
   await page.locator('.outline button').filter({hasText:'Stable'}).click();
-  await page.locator('#files-input').setInputFiles(fixture('note.md','New preface\n# Title\n## Stable\nUpdated'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();
+  await importFiles(page,fixture('note.md','New preface\n# Title\n## Stable\nUpdated'));
+
   await expect(page.locator('#detail .highlight').first()).toContainText('3');
   await expect(page.locator('#detail .highlight')).toContainText(['## Stable','Updated']);
 });

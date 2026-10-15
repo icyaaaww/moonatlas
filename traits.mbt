@@ -225,3 +225,39 @@ pub extend LineDiff with ToJson::{to_json}
 
 ///|
 pub extend LineDiff with @json.FromJson::{from_json}
+
+///|
+pub extend SearchHit with Eq::{equal, not_equal}
+
+///|
+pub extend SearchHit with @debug.Debug::{to_repr}
+
+///|
+pub extend SearchHit with ToJson::{to_json}
+
+///|
+pub extend SearchHit with @json.FromJson::{from_json}
+
+///|
+pub extend SearchResult with Eq::{equal, not_equal}
+
+///|
+pub extend SearchResult with @debug.Debug::{to_repr}
+
+///|
+pub extend SearchResult with ToJson::{to_json}
+
+///|
+pub extend SearchResult with @json.FromJson::{from_json}
+
+///|
+pub extend BatchClassification with Eq::{equal, not_equal}
+
+///|
+pub extend BatchClassification with @debug.Debug::{to_repr}
+
+///|
+pub extend BatchClassification with ToJson::{to_json}
+
+///|
+pub extend BatchClassification with @json.FromJson::{from_json}

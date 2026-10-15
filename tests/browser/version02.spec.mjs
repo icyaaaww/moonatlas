@@ -1,9 +1,10 @@
+import {importFiles} from './helpers.mjs';
 import {test,expect} from '@playwright/test';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 const app=pathToFileURL(fileURLToPath(new URL('../../dist/MoonAtlas.html',import.meta.url))).href;
 const fixture=(name,text)=>({name,mimeType:'text/plain',buffer:Buffer.from(text)});
 async function importNote(page,text='# Title\n## Chapter\nold'){
-  await page.locator('#files-input').setInputFiles(fixture('note.md',text));
+  await importFiles(page,fixture('note.md',text));
 }
 async function enableSave(page){
   await page.locator('#local-save').click();await page.getByRole('button',{name:'开启本机自动保存',exact:true}).click();
@@ -13,7 +14,7 @@ async function enableSave(page){
 async function rename(page,name){
   await page.locator('.doc-open').first().click();await page.getByLabel('显示名称').fill(name);await page.getByRole('button',{name:'保存整理',exact:true}).click();
 }
-test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);});
+test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);await page.locator('#start-demo').click();});
 
 test('classification, removal and baseline changes can be undone and redone',async({page})=>{
   await importNote(page);await rename(page,'My title');
@@ -21,8 +22,8 @@ test('classification, removal and baseline changes can be undone and redone',asy
   await page.locator('#redo').click();await expect(page.locator('.doc-open')).toContainText('My title');
   await page.getByRole('button',{name:'移出资料集',exact:true}).click();await page.getByRole('button',{name:'移出',exact:true}).click();
   await expect(page.locator('.doc-node')).toHaveCount(0);await page.locator('#undo').click();await expect(page.locator('.doc-open')).toContainText('My title');
-  await page.locator('#files-input').setInputFiles(fixture('note.md','# Title\n## Chapter\nnew'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await page.locator('[data-view="changes"]').click();
+  await importFiles(page,fixture('note.md','# Title\n## Chapter\nnew'));
+  await page.locator('[data-view="changes"]').click();
   await expect(page.locator('#change-count')).toHaveText('1');await page.getByRole('button',{name:'将当前资料设为基线',exact:true}).click();await page.getByRole('button',{name:'设为新基线',exact:true}).click();
   await expect(page.locator('#change-count')).toHaveText('0');await page.locator('#undo').click();await expect(page.locator('#change-count')).toHaveText('1');
 });
@@ -42,7 +43,7 @@ test('clearing local draft does not clear current project or recreate the draft'
   await importNote(page);await enableSave(page);await rename(page,'To clear');
   await expect(page.locator('#local-save')).toHaveText('已保存到本机 ✓');await page.locator('#local-save').click();await page.getByRole('button',{name:'清除本机草稿',exact:true}).click();
   await expect(page.locator('.doc-open')).toContainText('To clear');await expect(page.locator('#local-save')).toHaveText('本机自动保存：未开启');
-  page.on('dialog',d=>d.accept());await page.reload();await expect(page.locator('#sample-badge')).toBeVisible();await expect(page.locator('#modal')).not.toBeVisible();
+  page.on('dialog',d=>d.accept());await page.reload();await expect(page.locator('#welcome')).toBeVisible();await expect(page.locator('#modal')).not.toBeVisible();
 });
 
 test('another tab cannot silently overwrite a newer local draft',async({page,context})=>{
@@ -77,8 +78,8 @@ test('map supports zoom, pan, topic focus, folding and source-backed reference l
 
 test('chapter comparison shows before and after, additions and removals',async({page})=>{
   await importNote(page,'# Title\n## Chapter\nold text\n## Gone\nremoved');
-  await page.locator('#files-input').setInputFiles(fixture('note.md','# Title\n## Chapter\nnew text\n## Added\nnew section'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await page.locator('[data-view="changes"]').click();
+  await importFiles(page,fixture('note.md','# Title\n## Chapter\nnew text\n## Added\nnew section'));
+  await page.locator('[data-view="changes"]').click();
   await page.getByRole('button',{name:'查看章节变化 · 3 处',exact:true}).click();
   await expect(page.locator('.diff-pane.before')).toContainText('old text');await expect(page.locator('.diff-pane.after')).toContainText('new text');
   await page.screenshot({path:'test-results/v02-section-diff.png',fullPage:true});
@@ -90,8 +91,8 @@ test('chapter comparison shows before and after, additions and removals',async({
 test('mobile comparison and map controls remain inside viewport',async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'适合宽度',exact:true}).click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await importNote(page);await page.locator('#files-input').setInputFiles(fixture('note.md','# Title\n## Chapter\nnew'));
-  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();await page.locator('[data-view="changes"]').click();await page.getByRole('button',{name:'查看章节变化 · 1 处',exact:true}).click();
+  await importNote(page);await importFiles(page,fixture('note.md','# Title\n## Chapter\nnew'));
+  await page.locator('[data-view="changes"]').click();await page.getByRole('button',{name:'查看章节变化 · 1 处',exact:true}).click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/v02-mobile-diff.png',fullPage:true});
 });

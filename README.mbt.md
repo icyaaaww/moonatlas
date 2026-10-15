@@ -36,6 +36,8 @@ Public entry points:
 - `health_checks(atlas)` creates stable structural findings with original paths and lines; validate `Atlas.issues` first.
 - `update_impacts(before, after)` returns direct incoming reference evidence from both snapshots, including deleted or renamed targets; inspect `issues`.
 - `diff_lines(before, after)` returns 1-based changed line ranges; a count of zero is an insertion/deletion boundary. `precise: false` explicitly indicates a bounded whole-region fallback. Browser transport limits each text to 200,000 UTF-16 units.
+- `search_documents(documents, preferences, query)` returns literal case-insensitive matches with snippets and 1-based source lines. Metadata hits use line 0. At most 200 hits are returned; `total` includes remaining matches. Inspect `issues` before use.
+- `classify_documents(documents, preferences, paths, topic)` applies one topic to 1–200 unique existing paths while preserving display titles and unselected preferences. Invalid selections fail atomically; inspect `issues` before using `preferences`.
 - `export_index(atlas)` creates an escaped Markdown inventory with source line ranges.
 - `export_svg(atlas, title)` creates a portable topic/document overview.
 

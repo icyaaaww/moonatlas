@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0 — 2026-10-15
+
+Local stable build. GitHub release and CI for this version are pending publication.
+
+- Explicit first-use home with import, recovery and fictional example choices.
+- Cancellable file reads and merge/replace previews listing every affected or skipped file; removals require acknowledgement before applying.
+- Bounded MoonBit search with source snippets, exact line navigation, keyword highlights and automatic map expansion.
+- Atomic MoonBit batch classification and batch health review, affected-item confirmation and single-step undo.
+- SHA-256 project backups, read-back verification and safe project switching only after a matching backup is verified or changes explicitly discarded.
+- Backward-compatible v1 recovery, clearer draft/backup status and actionable corruption errors.
+- Multi-engine browser regression coverage, reproducible synthetic performance measurements, migration guide and a real-user trial kit.
+- No real-user outcomes or Mooncakes publication are claimed; validation scope and remaining limits are recorded in docs/validation.md.
+
 ## 0.3.0 — 2026-10-15
 
 Public source and offline distribution: https://github.com/icyaaaww/moonatlas/releases/tag/v0.3.0
