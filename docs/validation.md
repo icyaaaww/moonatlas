@@ -1,6 +1,6 @@
 # 验证记录
 
-版本：0.2.0；日期：2026-10-15。以下为本机实际执行结果，不代表远程 CI、真实用户试用或全浏览器认证。
+版本：0.2.0；日期：2026-10-15。以下分别记录本机和 GitHub Actions 实际执行结果，不代表真实用户试用或全浏览器认证。
 
 ## 环境
 
@@ -59,11 +59,21 @@ Chromium 使用独立测试环境、file:// 页面和离线网络设置，覆盖
 19. 修改、增加、移除章节的前后原文对照及当前原文跳转。
 20. 手机端新增控件和章节对比不造成页面横向溢出。
 
+## GitHub Actions 验证
+
+2026-10-15，提交 `f60f28db378efd0f0234cceaa87d6de96e74ee1e` 的
+[远程运行 38681329440](https://github.com/icyaaaww/moonatlas/actions/runs/38681329440)
+已完成，Ubuntu 和 Windows 两个任务均通过。
+
+两端均执行 MoonBit 全目标检查、JS / Wasm GC 测试、接口与格式检查、
+依赖安装、独立 HTML 构建、Node 集成测试、Chromium 页面测试及示例运行。
+干净环境在构建前执行 `moon update` 初始化包索引；各平台 HTML 与测试产物可在该运行页下载。
+后续提交的状态以仓库 Actions 页面对应运行记录为准。
+
 ## 已知工具链提示与未验证项
 
 - .mbtx 构建出现 `Duplicate import ... async/internal/c_buffer` 提示，来源于依赖导入，退出码为 0，产物及测试通过。
 - 测试运行器提示 NO_COLOR/FORCE_COLOR 冲突，仅影响终端颜色。
-- 已编写 Linux / Windows GitHub Actions，但未上传并实际运行远程 CI。
 - 没有验证 Firefox、Safari、移动端真实设备、屏幕阅读器和各种第三方 Markdown 方言。
 - 未进行真实用户试用、语义正确性评估或外部知识库连接验证。
 - 包尚未发布到 Mooncakes；当前依赖版本/命名占位仍需发布前确认。
