@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>月图 MoonAtlas · 让资料成为可探索的知识地图</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c6155'/%3E%3Cpath d='M8 23V9l8 9 8-9v14' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script id="moonatlas-seed" type="application/json">null</script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#"><span class="brand-mark">M</span><span>月图 <small>MOONATLAS</small></span></a>
+    <div class="side-label">你的知识工作台</div>
+    <nav aria-label="主导航">
+      <button class="nav active" data-view="map"><span>◈</span> 知识地图</button>
+      <button class="nav" data-view="concepts"><span>⌘</span> 跨文档线索 <b id="concept-count">0</b></button>
+      <button class="nav" data-view="organize"><span>▤</span> 整理工作台 <b id="issue-count">0</b></button>
+      <button class="nav" data-view="changes"><span>↻</span> 更新记录 <b id="change-count">0</b></button>
+    </nav>
+    <div class="side-label">资料集</div>
+    <button id="open-project" class="side-action">↗ 打开项目文件</button>
+    <button id="load-demo" class="side-action">◇ 探索示例资料</button>
+    <button id="new-project" class="side-action">＋ 新建空白地图</button>
+    <div class="side-bottom"><span class="local-dot"></span> 本地处理 · 无需账号<p>原文留在当前窗口。保存项目后，<br>下次可继续你的整理。</p><small>MoonBit core / v0.1.0</small></div>
+  </aside>
+  <div class="app">
+    <header class="topbar"><div class="breadcrumb">个人工作空间 <span>/</span> <strong id="workspace-name">我的知识地图</strong><span id="sample-badge" class="badge">示例资料</span></div><div class="toolbar"><button id="save-project">保存项目</button><button id="export-menu">导出 ↗</button><button id="import-files" class="primary">＋ 导入文档</button><button id="import-folder" title="保留子文件夹与文档链接">导入文件夹</button></div></header>
+    <main>
+      <section class="intro"><div><div class="eyebrow">KNOWLEDGE, CONNECTED.</div><h1 id="view-title">看见知识的全貌<span>。</span></h1><p id="view-description">把散落的资料串起来。每一条线索，都可以回到原文。</p></div><div id="stats" class="stats"></div></section>
+      <div class="workspace">
+        <section class="explorer" aria-label="知识库浏览器">
+          <div class="explorer-tools"><div class="view-label" id="view-label">全局地图 <span>目录 → 文档 → 标题</span></div><label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索标题、路径、正文…" aria-label="搜索资料"></label></div>
+          <div id="view-content"></div>
+          <div class="explorer-footer"><span id="footer-info">标题与目录线索 · 可人工调整</span><button id="rename-project" class="text-button">重命名地图</button></div>
+        </section>
+        <aside id="detail" class="detail" aria-label="原文与整理"></aside>
+      </div>
+      <div class="privacy-note">资料只在本机浏览器中处理，不会自动上传。支持 UTF-8 Markdown / TXT；当前版本不读取 PDF、Word 或在线知识库。</div>
+    </main>
+  </div>
+  <input id="files-input" type="file" multiple accept=".md,.txt" hidden>
+  <input id="folder-input" type="file" webkitdirectory multiple hidden>
+  <input id="project-input" type="file" accept=".json" hidden>
+  <dialog id="modal"><form method="dialog"><div id="modal-content"></div><div id="modal-actions" class="modal-actions"></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="drop-overlay" hidden>松开文件，添加到知识地图<span>Markdown / TXT 文档 · 文件夹请使用“导入文件夹”</span></div>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
