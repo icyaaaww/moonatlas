@@ -2,6 +2,8 @@
 
 ## 0.2.0 — 2026-10-15
 
+Public source and offline distribution: https://github.com/icyaaaww/moonatlas
+
 - Opt-in IndexedDB drafts with explicit recovery, clearing, transaction completion status and revision conflicts between tabs.
 - Bounded session undo/redo for document imports, classifications, aliases, removals and baseline changes.
 - Map zoom, pan, fit-to-width, topic folding/focus and clickable source-backed document reference lines.

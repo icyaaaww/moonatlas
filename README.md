@@ -6,11 +6,13 @@
 先看主题与文档，再展开标题、查看带行号的原文；把你的分类判断保存下来，
 下一次更新资料时继续使用。
 
-**当前状态：0.2.0 本地可用版本。尚未发布 GitHub / Mooncakes，尚无真实用户验证结果。**
+**当前状态：0.2.0 开源预览版。尚未发布 Mooncakes，尚无真实用户验证结果。**
+
+[GitHub 仓库](https://github.com/icyaaaww/moonatlas) · [离线使用包](https://github.com/icyaaaww/moonatlas/releases/latest) · [验证记录](docs/validation.md)
 
 ## 直接使用
 
-双击交付包中的 `MoonAtlas.html`，使用现代 Chrome / Edge / Firefox 浏览器打开。
+从 Releases 下载 `MoonAtlas-0.2.0-offline.zip` 并解压，双击其中的 `MoonAtlas.html`，使用现代 Chrome / Edge / Firefox 浏览器打开。
 不需要安装 Node、MoonBit，不需要账号、服务器或 API Key。当前实测浏览器为 Chromium。
 
 1. 先探索内置的 8 篇**虚构示例资料**。展开“发布流程”，点击“回滚”，查看右侧出处。
