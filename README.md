@@ -6,7 +6,7 @@
 先看主题与文档，再展开标题、查看带行号的原文；把你的分类判断保存下来，
 下一次更新资料时继续使用。
 
-**当前版本：1.0.0 正式版。尚未发布 Mooncakes，尚无真实用户验证结果。测试环境及范围见验证记录。**
+**网页应用：1.0.0 正式版。Mooncakes 核心库：icyaaaww/moonatlas@0.1.0，已发布并验证安装。尚无真实用户验证结果。**
 
 [GitHub 仓库](https://github.com/icyaaaww/moonatlas) · [离线使用包](https://github.com/icyaaaww/moonatlas/releases/latest) · [验证记录](docs/validation.md)
 
@@ -136,7 +136,14 @@ MoonBit 库示例：
 moon run examples/demo --target js
 ```
 
-公开 API 示例见 `README.mbt.md`。包尚未发布，暂不要执行 `moon add icyaaaww/moonatlas`。
+MoonBit 核心库已发布到 Mooncakes，可在其他 MoonBit 项目中安装：
+
+```sh
+moon add icyaaaww/moonatlas
+```
+
+公开 API 示例与导入方式见 `README.mbt.md`，实际安装验证见 [Mooncakes 发布记录](docs/mooncakes-release.md)。
+当前包版本为 `0.1.0`，对应网页应用 `1.0.0` 的核心能力；两者独立编号。当前发布工具要求包版本使用 `0.x.y`。
 
 ## 项目结构
 

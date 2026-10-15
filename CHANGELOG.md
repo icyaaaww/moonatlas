@@ -1,5 +1,13 @@
 # Changelog
 
+## Mooncakes core 0.1.0 — 2026-10-15
+
+- Published `icyaaaww/moonatlas@0.1.0`, the reusable MoonBit core used by the 1.0.0 browser app. Library and application versions are independent.
+- Added repository metadata and an explicit package allowlist; the registry archive contains 31 core, test, example, documentation and license files, without the browser/npm host.
+- Verified extracted package checks, 40 tests on each of JS/Wasm GC and a runnable example.
+- Installed from the public registry in a fresh consumer project; four external API tests pass on each of JS/Wasm GC, and the consumer demo runs successfully.
+- Added a CI packaging check and documented actual publication and installation evidence in docs/mooncakes-release.md.
+
 ## 1.0.0 — 2026-10-15
 
 Stable source and offline distribution: https://github.com/icyaaaww/moonatlas/releases/tag/v1.0.0
@@ -12,7 +20,7 @@ Local validation is recorded in docs/validation.md; remote CI is tracked against
 - SHA-256 project backups, read-back verification and safe project switching only after a matching backup is verified or changes explicitly discarded.
 - Backward-compatible v1 recovery, clearer draft/backup status and actionable corruption errors.
 - Multi-engine browser regression coverage, reproducible synthetic performance measurements, migration guide and a real-user trial kit.
-- No real-user outcomes or Mooncakes publication are claimed; validation scope and remaining limits are recorded in docs/validation.md.
+- At the original application release, no real-user outcomes or Mooncakes publication were claimed. The subsequent core publication is recorded above; remaining limits are recorded in docs/validation.md.
 
 ## 0.3.0 — 2026-10-15
 

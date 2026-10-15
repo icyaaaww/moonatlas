@@ -111,7 +111,7 @@ Node 集成覆盖编译后的实际 MoonBit bridge、格式拒绝、项目恢复
 - 测试运行器提示 NO_COLOR/FORCE_COLOR 冲突，仅影响终端颜色。
 - 没有验证真实 Safari、移动端真实设备、屏幕阅读器和各种第三方 Markdown 方言；Firefox 测试引擎范围见上表。
 - 未进行真实用户试用、语义正确性评估或外部知识库连接验证。
-- 包尚未发布到 Mooncakes；当前依赖版本/命名占位仍需发布前确认。
+- 核心库现已发布 `icyaaaww/moonatlas@0.1.0`，独立安装验证见 [发布记录](mooncakes-release.md)。库版本与网页应用 1.0.0 独立编号。
 
 截图位于本地 `test-results/`：原有桌面/手机截图，以及 `v02-map.png`、
 `v02-autosave.png`、`v02-section-diff.png`、`v02-mobile-diff.png`。已进行视觉检查，测试产物不默认提交进 Git。
