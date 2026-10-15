@@ -7,9 +7,17 @@ import {
 }
 
 // Values
+pub fn build_atlas(Array[Document], Array[Preference], Array[Alias]) -> Atlas
+
+pub fn compare_documents(Array[Document], Array[Document]) -> Array[Change]
+
+pub fn export_index(Atlas) -> String
+
 pub fn normalize_name(String) -> String
 
 pub fn parse_document(Document, Array[Preference]) -> Page
+
+pub fn reconcile_preferences(Array[Document], Array[Document], Array[Preference]) -> Array[Preference]
 
 pub fn validate_documents(Array[Document]) -> Array[Issue]
 

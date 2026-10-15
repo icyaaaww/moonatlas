@@ -1,0 +1,8 @@
+import {
+  "icyaaaww/moonatlas" @atlas,
+  "moonbitlang/core/json",
+}
+
+options(
+  link: { "js": { "format": "esm", "exports": [ "dispatch" ] } },
+)
