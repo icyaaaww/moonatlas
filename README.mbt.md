@@ -31,6 +31,7 @@ Public entry points:
 - `parse_document(document, preferences)` extracts ATX headings and exact source lines.
 - `build_atlas(documents, preferences, aliases)` validates and creates a deterministic map.
 - `compare_documents(before, after)` reports additions, changes, removals and unique exact-content renames.
+- `compare_sections(before, after)` returns literal section additions/removals/edits with complete before/after text and line evidence; inspect `issues` and repeated-heading `notes`.
 - `reconcile_preferences(before, after, preferences)` transfers manual choices across those renames.
 - `export_index(atlas)` creates an escaped Markdown inventory with source line ranges.
 - `export_svg(atlas, title)` creates a portable topic/document overview.

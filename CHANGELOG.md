@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 — 2026-10-15
+
+- Opt-in IndexedDB drafts with explicit recovery, clearing, transaction completion status and revision conflicts between tabs.
+- Bounded session undo/redo for document imports, classifications, aliases, removals and baseline changes.
+- Map zoom, pan, fit-to-width, topic folding/focus and clickable source-backed document reference lines.
+- Pure MoonBit section comparisons with complete before/after text, line evidence and duplicate-heading caveats.
+- Side-by-side section inspection, paginated long sources and changed-document map badges.
+- Existing v1 project files remain compatible; sharing does not carry persistence opt-in or undo history.
+- Added failure, recovery, concurrency, comparison and navigation tests.
+
 ## 0.1.0 — 2026-10-15
 
 First local implementation; not a published registry or GitHub release.
