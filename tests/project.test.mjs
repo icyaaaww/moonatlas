@@ -57,6 +57,11 @@ test('file import enforces UTF8 and keeps relative folder links',async()=>{
   await assert.rejects(()=>readDocuments([new File([new Uint8Array([0xff])],'bad.md')]));
   await assert.rejects(()=>readDocuments([new File(['x'],'a.md'),new File(['y'],'a.md')]));
 });
+test('asynchronous file import snapshots its selection before a picker resets',async()=>{
+  const selection=[new File(['# A'],'a.md'),new File(['ignored'],'image.png')];
+  const reading=readDocuments(selection);selection.length=0;
+  const result=await reading;assert.equal(result.documents.length,1);assert.equal(result.skipped,1);
+});
 test('host serves only app assets and has no write endpoints',async()=>{
   const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try{

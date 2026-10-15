@@ -23,10 +23,11 @@
     <button id="open-project" class="side-action">↗ 打开项目文件</button>
     <button id="load-demo" class="side-action">◇ 探索示例资料</button>
     <button id="new-project" class="side-action">＋ 新建空白地图</button>
-    <div class="side-bottom"><span class="local-dot"></span> 本地处理 · 无需账号<p>原文留在当前窗口。保存项目后，<br>下次可继续你的整理。</p><small>MoonBit core / v0.1.0</small></div>
+    <div class="side-bottom"><span class="local-dot"></span> 本地处理 · 无需账号<p>可主动开启本机自动保存。<br>下载项目文件可迁移与备份。</p><small>MoonBit core / v0.2.0</small></div>
   </aside>
   <div class="app">
     <header class="topbar"><div class="breadcrumb">个人工作空间 <span>/</span> <strong id="workspace-name">我的知识地图</strong><span id="sample-badge" class="badge">示例资料</span></div><div class="toolbar"><button id="save-project">保存项目</button><button id="export-menu">导出 ↗</button><button id="import-files" class="primary">＋ 导入文档</button><button id="import-folder" title="保留子文件夹与文档链接">导入文件夹</button></div></header>
+    <div class="session-bar"><div class="history-actions"><button id="undo" disabled title="Ctrl / ⌘ + Z">↶ 撤销</button><button id="redo" disabled title="Ctrl / ⌘ + Shift + Z">↷ 重做</button><span>当前窗口最多 20 步</span></div><button id="local-save" class="draft-button">本机自动保存：未开启</button></div>
     <main>
       <section class="intro"><div><div class="eyebrow">KNOWLEDGE, CONNECTED.</div><h1 id="view-title">看见知识的全貌<span>。</span></h1><p id="view-description">把散落的资料串起来。每一条线索，都可以回到原文。</p></div><div id="stats" class="stats"></div></section>
       <div class="workspace">

@@ -39,7 +39,8 @@ export function shareHTML(template, project) {
 }
 
 export async function readDocuments(files) {
-  const accepted = Array.from(files).filter(f => /\.(md|txt)$/i.test(f.name));
+  const selected = Array.from(files);
+  const accepted = selected.filter(f => /\.(md|txt)$/i.test(f.name));
   if (!accepted.length) throw new Error('请选择 UTF-8 编码的 .md 或 .txt 文档');
   if (accepted.length > 200) throw new Error('一次最多导入 200 篇文档');
   if (accepted.some(f => f.size > 800000) || accepted.reduce((n,f) => n + f.size, 0) > 8000000) throw new Error('文件过大，请拆分资料集后导入');
@@ -56,5 +57,5 @@ export async function readDocuments(files) {
     docs.push({ path, content });
   }
   build({ ...emptyProject(), documents: docs });
-  return { documents: docs, skipped: files.length - accepted.length };
+  return { documents: docs, skipped: selected.length - accepted.length };
 }

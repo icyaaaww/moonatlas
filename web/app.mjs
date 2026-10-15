@@ -1,11 +1,24 @@
 import { core, build, emptyProject, replaceDocuments, parseProject, projectJSON, shareHTML, readDocuments } from './project.mjs';
 import { sampleDocuments } from './samples.mjs';
+import { ProjectHistory } from './history.mjs';
+import { LocalDraft, DraftWriter } from './local-draft.mjs';
+import { mapControls, mountMap } from './map-view.mjs';
 
 const $ = id => document.getElementById(id);
 const template = document.documentElement.outerHTML;
 const needsOfflineTemplate = Boolean(document.querySelector('script[src="app.mjs"]'));
 let project = emptyProject(), atlas, view = 'map', query = '', selection = null, demo = false, dirty = false, sourcePage = 0;
 const expanded = new Set();
+const history = new ProjectHistory();
+const mapState = {zoom:1,fit:false,focus:null,collapsed:new Set(),links:true,scrollLeft:0,scrollTop:0};
+const store = new LocalDraft(globalThis.indexedDB,location.pathname);
+let draftStatus='off', draftRecord=null, diffSelection=null, updateCache=[], sectionCache=new Map(), mutation=0;
+const writer = new DraftWriter(store,(status,value)=>{
+  draftStatus=status;
+  if(status==='saved')draftRecord=value;
+  if(status==='error')fail(value);
+  renderSession();
+});
 const titles = {
   map: ['看见知识的全貌', '把散落的资料串起来。每一条线索，都可以回到原文。', '全局地图', '目录 → 文档 → 标题'],
   concepts: ['发现资料之间的联系', '同名标题是线索，是否属于同一概念，由你确认。', '跨文档线索', '保留每一处出处，不替你推断语义'],
@@ -43,15 +56,122 @@ function field(label, value, maxLength = 200) {
   const wrap = node('label', 'field', label); const input = node('input'); input.value = value; input.maxLength = maxLength; wrap.append(input); return [wrap, input];
 }
 function guardUnsaved(action) {
-  if (!dirty) return action();
-  modal('离开当前资料集？', '当前窗口有尚未保存的整理。你可以先保存项目文件，再继续。', [
+  if (!dirty && !writer.enabled) return action();
+  modal('离开当前资料集？', writer.enabled?'本机自动保存只保留一个当前草稿。切换资料集会替换这份草稿，并清空当前窗口的撤销记录。建议先下载项目备份。':'当前窗口有尚未下载保存的整理。你可以先保存项目文件，再继续。', [
     ['先保存项目', () => { save(); action(); }, 'primary'], ['放弃当前更改', action, 'danger'],
   ]);
 }
-function adopt(next, { sample = false, changed = true } = {}) {
+function renderSession(){
+  $('undo').disabled=!history.past.length;$('redo').disabled=!history.future.length;
+  const text={off:'本机自动保存：未开启',pending:'正在保存到本机…',saved:'已保存到本机 ✓',error:'本机保存已暂停 · 查看'};
+  $('local-save').textContent=text[draftStatus];$('local-save').dataset.status=draftStatus;
+  $('local-save').title=draftStatus==='saved'?'浏览器草稿；请定期下载项目备份':'点击管理本机草稿与自动保存';
+}
+function stepHistory(direction){
+  try{
+    const state=history[direction]({project,demo});if(!state)return;
+    adopt(state.project,{sample:state.demo,remember:false});
+    toast(direction==='undo'?'已撤销上一步整理':'已重做');
+  }catch(error){fail(error);}
+}
+async function checkDraftAtStartup(){
+  const atStart=mutation;
+  try{
+    const record=await store.read();draftRecord=record;
+    if(!record || mutation!==atStart)return;
+    offerDraft(record);
+  }catch{/* Keep ordinary in-memory use available; explain failures when storage is requested. */}
+}
+function offerDraft(record){
+  modal('发现上次的本机草稿',`保存时间：${new Date(record.updatedAt).toLocaleString()}。恢复会继续在本机自动保存；也可以取消，保留当前页面。`,[
+    ['恢复并继续自动保存',()=>restoreDraft(record),'primary'],
+    ['下载草稿备份',()=>{const restored=parseProject(JSON.stringify(record.project));download('MoonAtlas-local-backup.json',projectJSON(restored),'application/json');}],
+  ]);
+}
+async function restoreDraft(record){
+  const restored=parseProject(JSON.stringify(record.project));
+  await writer.stop();writer.enable(record.revision);draftRecord=record;
+  selection=null;expanded.clear();adopt(restored,{changed:false,reset:true});
+  await writer.tail;
+  if(writer.enabled)toast('已恢复本机草稿；撤销记录从本次打开开始');
+}
+async function manageDraft(){
+  await writer.tail;
+  let record;
+  try{record=await store.read();draftRecord=record;}catch(error){fail(error);return;}
+  if(writer.enabled && record?.revision!==writer.revision){await writer.stop();draftStatus='error';renderSession();}
+  const controls=[];
+  if(writer.enabled){
+    controls.push(['关闭自动保存',async()=>{await writer.stop();draftStatus='off';renderSession();toast('自动保存已关闭，原草稿仍保留');}]);
+  }else{
+    controls.push([record?'用当前项目替换草稿并开启':'开启本机自动保存',async()=>{
+      await writer.stop();writer.enable(record?.revision || null);await writer.enqueue(project);toast('本机自动保存已开启；建议定期下载项目备份');
+    },'primary']);
+    if(record)controls.push(['恢复草稿',()=>restoreDraft(record)]);
+  }
+  if(record)controls.push(['清除本机草稿',async()=>{
+    await writer.stop();writer.revision=record.revision;
+    try{await writer.clear();draftRecord=null;toast('本机草稿已清除，当前窗口内容仍保留');}
+    catch(error){draftStatus='error';renderSession();throw error;}
+  },'danger']);
+  modal('本机自动保存',`开启后，当前项目的完整原文、分类和比较基线会保存在这台设备的浏览器中。不会上传。浏览器清理、无痕窗口结束或应用地址改变后，草稿可能无法恢复，请同时下载项目备份。\n${record?'已有一份草稿，保存于 '+new Date(record.updatedAt).toLocaleString()+'。清除只影响浏览器草稿，无法撤销。':'目前没有已保存的草稿。'}\n撤销与重做只在当前窗口保留，不随草稿恢复。`,controls);
+}
+function sectionComparison(path){
+  if(!sectionCache.has(path)){
+    const before=project.baseline.find(d=>d.path===path),after=project.documents.find(d=>d.path===path);
+    const result=core('sections',{before,after});
+    if(result.issues.length)throw new Error(result.issues.map(i=>i.message).join('\n'));
+    sectionCache.set(path,result);
+  }
+  return sectionCache.get(path);
+}
+function showSectionChanges(path){
+  const result=sectionComparison(path);
+  diffSelection={path,index:0,beforePage:0,afterPage:0};renderDetail();
+  if(!result.changes.length)toast('未发现可展示的章节差异，请核对完整原文');
+  if(matchMedia('(max-width:950px)').matches)$('detail').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function renderSectionDiff(host){
+  const result=sectionComparison(diffSelection.path),changes=result.changes;
+  const head=node('div','detail-head');const kicker=node('div','detail-kicker','COMPARE / 章节变化');
+  kicker.append(button('返回原文',()=>select(diffSelection.path),'text-button'));
+  head.append(kicker,node('h2','',`${changes.length} 处章节变化`),node('div','path',diffSelection.path));host.append(head);
+  const body=node('div','detail-body');
+  result.notes.forEach(note=>body.append(node('div','notice',note)));
+  body.append(node('p','hint','按标题与出现顺序配对，展示完整章节原文。标题改名按新增与删除处理；这里不推断语义是否改变。'));
+  if(!changes.length){body.append(node('p','hint','没有章节变化'));host.append(body);return;}
+  const choose=node('label','field','选择变化章节');const dropdown=node('select');
+  changes.forEach((c,i)=>{const option=node('option','',`${kindNames[c.kind]} · ${c.title}`);option.value=String(i);dropdown.append(option);});dropdown.value=String(diffSelection.index);
+  dropdown.addEventListener('change',()=>{diffSelection.index=Number(dropdown.value);diffSelection.beforePage=0;diffSelection.afterPage=0;renderDetail();});choose.append(dropdown);body.append(choose);
+  const change=changes[diffSelection.index];
+  const row=node('div','card-row');row.append(node('h3','',change.title),node('span','change-kind '+change.kind,kindNames[change.kind]));body.append(row);
+  const columns=node('div','diff-columns');
+  for(const side of ['before','after']){
+    const pane=node('section','diff-pane '+side),evidence=change[side],text=change[`${side}_text`];
+    pane.append(node('div','section-label',side==='before'?'修改前 · 基线':'修改后 · 当前'));
+    if(!evidence){pane.append(node('p','hint',side==='before'?'原先没有这个章节':'当前已移除此章节'));columns.append(pane);continue;}
+    pane.append(node('div','path',`L${evidence.start_line}–${evidence.end_line}`));
+    const lines=text.split('\n'),key=side+'Page',page=diffSelection[key],offset=page*60;
+    const source=node('div','source diff-source');
+    lines.slice(offset,offset+60).forEach((text,i)=>{const row=node('div','source-line');row.append(node('span','line-no',String(evidence.start_line+offset+i)),node('span','line-text',text || ' '));source.append(row);});pane.append(source);
+    if(lines.length>60){const pagination=node('div','pagination');const prev=button('上一页',()=>{diffSelection[key]--;renderDetail();});prev.disabled=page===0;const next=button('下一页',()=>{diffSelection[key]++;renderDetail();});next.disabled=offset+60>=lines.length;pagination.append(prev,node('span','',`${page+1}/${Math.ceil(lines.length/60)}`),next);pane.append(pagination);}
+    pane.append(button('下载这段原文',()=>download(`MoonAtlas-${side}.txt`,text,'text/plain'),'text-button'));
+    if(side==='after')pane.append(button('定位当前原文',()=>select(diffSelection.path,evidence.start_line,evidence.end_line),'text-button'));
+    columns.append(pane);
+  }
+  body.append(columns);host.append(body);
+}
+function adopt(next, { sample = false, changed = true, remember = true, reset = false } = {}) {
   const graph = build(next);
+  if(reset){history.clear();mapState.focus=null;mapState.collapsed.clear();mapState.scrollTop=0;mapState.scrollLeft=0;}
+  else if(remember && atlas && JSON.stringify(project)!==JSON.stringify(next)){
+    if(!history.push({project,demo}))toast('本次资料超过撤销缓存上限，请先下载项目备份');
+  }
   const previousContent = selection && project.documents.find(d=>d.path===selection.path)?.content;
   project = next; atlas = graph; demo = sample; dirty = changed;
+  mutation++;diffSelection=null;sectionCache.clear();
+  updateCache=core('compare',{before:project.baseline,after:project.documents});
+  if(mapState.focus && !atlas.pages.some(p=>p.topic===mapState.focus))mapState.focus=null;
   if (selection && !project.documents.some(d => d.path === selection.path)) selection = null;
   if (selection && previousContent !== project.documents.find(d=>d.path===selection.path)?.content) {
     const section = atlas.pages.find(p=>p.path===selection.path)?.sections.find(s=>s.id===selection.sectionId);
@@ -59,12 +179,13 @@ function adopt(next, { sample = false, changed = true } = {}) {
     sourcePage = Math.floor((selection.start-1)/100);
   }
   render();
+  if(writer.enabled)writer.enqueue(project).catch(()=>{});
 }
 function loadDemo() {
   selection = null; expanded.clear();
-  adopt({ ...emptyProject(), name: '团队与学习笔记', documents: structuredClone(sampleDocuments), baseline: structuredClone(sampleDocuments) }, { sample:true, changed:false });
+  adopt({ ...emptyProject(), name: '团队与学习笔记', documents: structuredClone(sampleDocuments), baseline: structuredClone(sampleDocuments) }, { sample:true, changed:false,reset:true });
 }
-function changes() { return core('compare', { before: project.baseline, after: project.documents }); }
+function changes() { return updateCache; }
 function problematicLinks() { return atlas.links.filter(l => Object.hasOwn(statusNames,l.status)); }
 function matches(page) {
   if (!query) return true;
@@ -72,6 +193,7 @@ function matches(page) {
   return [page.title,page.path,page.topic,...page.tags,content].join('\n').toLocaleLowerCase().includes(query);
 }
 function select(path, start = 1, end = 1) {
+  diffSelection=null;
   const section = atlas.pages.find(p=>p.path===path)?.sections.find(s=>s.evidence.start_line===start && s.evidence.end_line===end);
   selection = { path, start, end, sectionId:section?.id }; sourcePage = Math.floor((start - 1) / 100);
   renderDetail();
@@ -79,6 +201,7 @@ function select(path, start = 1, end = 1) {
   if (matchMedia('(max-width:950px)').matches) $('detail').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 function render() {
+  renderSession();
   const [title, description, label, hint] = titles[view];
   $('view-title').replaceChildren(document.createTextNode(title), node('span','','。'));
   $('view-description').textContent = description;
@@ -107,7 +230,8 @@ function renderView() {
   $('footer-info').textContent = query ? '正在筛选 · 清空搜索可查看完整资料集' : '标题与目录线索 · 可人工调整 · 不代表语义推断';
 }
 function renderMap(host) {
-  const pages = atlas.pages.filter(matches);
+  host.append(mapControls(mapState,renderView));
+  const pages = atlas.pages.filter(p=>matches(p) && (!mapState.focus || p.topic===mapState.focus));
   if (!pages.length) {
     const e = blank(query ? '没有匹配的资料' : '你的第一张知识地图', query ? '试试文档标题、路径或正文中的关键词。' : '导入一个 Markdown 文件夹，让资料的结构和联系变得清楚。');
     if (!query) e.append(button('＋ 导入文档', () => $('files-input').click(), 'primary'),button('打开项目文件', () => $('project-input').click()));
@@ -118,13 +242,19 @@ function renderMap(host) {
   const branches = node('div','branches');
   for (const [topic, docs] of Array.from(groups).sort((a,b) => a[0].localeCompare(b[0],'zh'))) {
     const branch = node('section','branch');
-    const heading = node('div','topic-label'); heading.append(node('span','','◇'),node('span','',topic),node('em','',`${docs.length} 篇`));
+    const heading = node('div','topic-label');
+    const fold=button(mapState.collapsed.has(topic)?'+':'−',()=>{if(mapState.collapsed.has(topic))mapState.collapsed.delete(topic);else mapState.collapsed.add(topic);renderView();},'topic-fold');
+    fold.setAttribute('aria-label',`${mapState.collapsed.has(topic)?'展开':'折叠'}主题 ${topic}`);fold.setAttribute('aria-expanded',String(!mapState.collapsed.has(topic)));
+    heading.append(fold,node('span','',topic),node('em','',`${docs.length} 篇`),button('聚焦',()=>{mapState.focus=topic;mapState.collapsed.delete(topic);mapState.scrollTop=0;renderView();},'topic-focus'));
     const list = node('div','doc-list');
+    list.hidden=mapState.collapsed.has(topic);
     for (const p of docs) {
       const card = node('div','doc-node' + (selection?.path === p.path ? ' selected' : '')); card.dataset.path = p.path;
       const open = button('', () => select(p.path), 'doc-open'); open.title = p.path;
+      const changed=changes().find(c=>c.path===p.path);
       open.append(node('span','file-icon','▧'),node('span','doc-title',p.title),node('span','node-meta',p.sections.length ? `${p.sections.length} 标题` : '纯文本'));
       card.append(open);
+      if(changed){const badge=node('span','map-change',kindNames[changed.kind]);badge.title='相对原文基线的变化';open.append(badge);}
       if (p.sections.length) {
         const toggle = button(expanded.has(p.path) ? '−' : '+', () => { if (expanded.has(p.path)) expanded.delete(p.path); else expanded.add(p.path); renderView(); },'expand');
         toggle.setAttribute('aria-label',`${expanded.has(p.path)?'收起':'展开'} ${p.title} 的标题`); toggle.setAttribute('aria-expanded',String(expanded.has(p.path))); card.append(toggle);
@@ -142,7 +272,7 @@ function renderMap(host) {
     }
     branch.append(heading,list); branches.append(branch);
   }
-  map.append(branches); host.append(map);
+  map.append(branches);mountMap(host,map,mapState,atlas.links,l=>select(l.from,l.line,l.line),renderView);
 }
 function sourceButton(path, line = 1, end = line, label = path) {
   const b = button('', () => select(path,line,end), 'source-link'); b.append(node('span','',label),node('small','',`L${line}${end > line ? '–'+end : ''} ↗`)); return b;
@@ -199,6 +329,10 @@ function renderChanges(host) {
     card.append(node('p','',c.previous_path ? `${c.previous_path} → ${c.path}\n${c.detail}` : c.detail));
     if(c.kind!=='removed') card.append(sourceButton(c.path));
     else card.append(button('查看基线原文',()=>showBaseline(c.path),'text-button'));
+    if(c.kind==='updated'){
+      const result=sectionComparison(c.path);
+      card.append(button(`查看章节变化 · ${result.changes.length} 处`,()=>showSectionChanges(c.path),'section-compare-button'));
+    }
     wrap.append(card);
   }
   if(!list.length) wrap.append(blank('与基线相比，没有原文变化','你仍可调整分类与显示名。导入新版资料后，这里会列出变化。'));
@@ -211,6 +345,8 @@ function showBaseline(path) {
 }
 function renderDetail() {
   const host = $('detail'); host.replaceChildren();
+  host.parentElement.classList.toggle('comparing',Boolean(diffSelection));
+  if(diffSelection){renderSectionDiff(host);return;}
   const p = selection && atlas.pages.find(p=>p.path===selection.path);
   if(!p) {
     const wrap = node('div','detail-welcome'); wrap.append(node('div','art','◈'),node('div','eyebrow','EVERY NODE HAS A SOURCE'),node('h2','','从一篇文档，走向整张地图'),node('p','hint','点击地图上的文档或标题，在这里查看原文与出处。'));
@@ -230,6 +366,7 @@ function renderDetail() {
   }
   const outgoing=atlas.links.filter(l=>l.from===p.path && ['linked','fragment_unchecked'].includes(l.status));
   if(outgoing.length) { body.append(node('div','section-label','文档中的引用')); outgoing.forEach(l=>body.append(sourceButton(l.target,1,1,l.target+(l.status==='fragment_unchecked'?' · 锚点未核验':'')))); }
+  if(changes().some(c=>c.path===p.path && c.kind==='updated'))body.append(button('对比修改前后的章节',()=>showSectionChanges(p.path),'section-compare-button'));
   host.append(body);
   const form=node('form','detail-form'); form.append(node('div','section-label','整理这篇资料'));
   const existing=project.preferences.find(pref=>pref.path===p.path);
@@ -252,7 +389,7 @@ async function importFiles(files) {
       let docs=documents;
       if(!replace) {const map=new Map(base.documents.map(d=>[d.path,d])); documents.forEach(d=>map.set(d.path,d));docs=Array.from(map.values());}
       let next=replaceDocuments(base,docs);
-      if(demo || !base.documents.length)next={...next,baseline:structuredClone(docs)};
+      if(demo || (!base.documents.length && !base.baseline.length && !base.preferences.length))next={...next,baseline:structuredClone(docs)};
       adopt(next);toast(`已导入 ${documents.length} 篇文档${skipped?`，跳过 ${skipped} 个非 Markdown/TXT 文件`:''}`);
     };
     if(demo || !project.documents.length) {apply(true);return;}
@@ -282,20 +419,30 @@ function showExport() {
   ]);
 }
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;render();}));
+$('undo').addEventListener('click',()=>stepHistory('undo'));
+$('redo').addEventListener('click',()=>stepHistory('redo'));
+$('local-save').addEventListener('click',()=>manageDraft().catch(fail));
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey) || e.altKey || e.target.closest('input,textarea,select,[contenteditable="true"]') || $('modal').open)return;
+  if(e.key.toLowerCase()==='z'){e.preventDefault();stepHistory(e.shiftKey?'redo':'undo');}
+  else if(e.key.toLowerCase()==='y'){e.preventDefault();stepHistory('redo');}
+});
+let resizeTimer;
+window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(view==='map')renderView();},100);});
 $('search').addEventListener('input',e=>{query=e.target.value.toLocaleLowerCase().trim();renderView();});
 $('import-files').addEventListener('click',()=>$('files-input').click());
 $('import-folder').addEventListener('click',()=>$('folder-input').click());
-for(const id of ['files-input','folder-input'])$(id).addEventListener('change',async e=>{await importFiles(e.target.files);e.target.value='';});
+for(const id of ['files-input','folder-input'])$(id).addEventListener('change',async e=>{const selected=Array.from(e.target.files);e.target.value='';await importFiles(selected);});
 $('open-project').addEventListener('click',()=>$('project-input').click());
 $('project-input').addEventListener('change',async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{if(f.size>30000000)throw new Error('项目文件过大');const next=parseProject(new TextDecoder('utf-8',{fatal:true}).decode(await f.arrayBuffer()));guardUnsaved(()=>{selection=null;expanded.clear();adopt(next,{changed:false});toast('项目已恢复，包括分类、归并规则和基线');});}catch(error){fail(error);}
+  try{if(f.size>30000000)throw new Error('项目文件过大');const next=parseProject(new TextDecoder('utf-8',{fatal:true}).decode(await f.arrayBuffer()));guardUnsaved(()=>{selection=null;expanded.clear();adopt(next,{changed:false,reset:true});toast('项目已恢复，包括分类、归并规则和基线');});}catch(error){fail(error);}
 });
 $('save-project').addEventListener('click',save);$('export-menu').addEventListener('click',showExport);
 $('load-demo').addEventListener('click',()=>guardUnsaved(loadDemo));
-$('new-project').addEventListener('click',()=>guardUnsaved(()=>{selection=null;expanded.clear();adopt(emptyProject(),{changed:false});}));
+$('new-project').addEventListener('click',()=>guardUnsaved(()=>{selection=null;expanded.clear();adopt(emptyProject(),{changed:false,reset:true});}));
 $('rename-project').addEventListener('click',()=>{const [wrap,input]=field('地图名称',project.name,120);modal('给地图起个名字','名称只影响当前项目的展示。', [['保存',()=>{if(!input.value.trim())throw new Error('请输入地图名称');adopt({...project,name:input.value.trim()},{sample:demo});},'primary']],[wrap]);});
-window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if((dirty && draftStatus!=='saved') || draftStatus==='pending'){e.preventDefault();e.returnValue='';}});
 let dragDepth=0;
 document.addEventListener('dragenter',e=>{if(Array.from(e.dataTransfer?.types||[]).includes('Files')){e.preventDefault();dragDepth++;$('drop-overlay').hidden=false;}});
 document.addEventListener('dragover',e=>{if(Array.from(e.dataTransfer?.types||[]).includes('Files'))e.preventDefault();});
@@ -303,5 +450,6 @@ document.addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(
 document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').hidden=true;if(e.dataTransfer?.files.length)importFiles(e.dataTransfer.files);});
 try {
   const seed=$('moonatlas-seed').textContent.trim();
-  if(seed && seed!=='null')adopt(parseProject(seed),{changed:false});else loadDemo();
+  if(seed && seed!=='null')adopt(parseProject(seed),{changed:false,reset:true});else loadDemo();
+  checkDraftAtStartup();
 }catch(error){adopt(emptyProject(),{changed:false});fail(error);}

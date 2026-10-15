@@ -7,6 +7,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const port=Number(process.env.PORT || 4173);
 const types={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const routes=new Map([['/','web/index.html'],['/index.html','web/index.html'],['/style.css','web/style.css'],['/app.mjs','web/app.mjs'],['/core.mjs','web/core.mjs'],['/project.mjs','web/project.mjs'],['/samples.mjs','web/samples.mjs'],['/MoonAtlas.html','dist/MoonAtlas.html']]);
+for(const name of ['history','local-draft','map-view'])routes.set(`/${name}.mjs`,`web/${name}.mjs`);
 export function createServer() {
   return http.createServer(async(req,res)=>{
     if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);res.end();return;}
