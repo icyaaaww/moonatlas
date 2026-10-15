@@ -13,15 +13,21 @@ pub fn compare_documents(Array[Document], Array[Document]) -> Array[Change]
 
 pub fn compare_sections(Document, Document) -> SectionComparison
 
+pub fn diff_lines(String, String) -> LineDiff
+
 pub fn export_index(Atlas) -> String
 
 pub fn export_svg(Atlas, String) -> String
+
+pub fn health_checks(Atlas) -> Array[HealthCheck]
 
 pub fn normalize_name(String) -> String
 
 pub fn parse_document(Document, Array[Preference]) -> Page
 
 pub fn reconcile_preferences(Array[Document], Array[Document], Array[Preference]) -> Array[Preference]
+
+pub fn update_impacts(Array[Document], Array[Document]) -> ImpactReport
 
 pub fn validate_documents(Array[Document]) -> Array[Issue]
 
@@ -107,6 +113,46 @@ pub fn Evidence::not_equal(Self, Self) -> Bool
 pub fn Evidence::to_json(Self) -> Json
 pub fn Evidence::to_repr(Self) -> @debug.Repr
 
+pub(all) struct HealthCheck {
+  id : String
+  kind : String
+  paths : Array[String]
+  line : Int
+  target : String
+  status : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn HealthCheck::equal(Self, Self) -> Bool
+pub fn HealthCheck::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HealthCheck::not_equal(Self, Self) -> Bool
+pub fn HealthCheck::to_json(Self) -> Json
+pub fn HealthCheck::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Impact {
+  changed_path : String
+  previous_path : String
+  kind : String
+  source_path : String
+  line : Int
+  snapshot : String
+  target : String
+  status : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Impact::equal(Self, Self) -> Bool
+pub fn Impact::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Impact::not_equal(Self, Self) -> Bool
+pub fn Impact::to_json(Self) -> Json
+pub fn Impact::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ImpactReport {
+  impacts : Array[Impact]
+  issues : Array[Issue]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ImpactReport::equal(Self, Self) -> Bool
+pub fn ImpactReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ImpactReport::not_equal(Self, Self) -> Bool
+pub fn ImpactReport::to_json(Self) -> Json
+pub fn ImpactReport::to_repr(Self) -> @debug.Repr
+
 pub(all) struct Issue {
   code : String
   path : String
@@ -117,6 +163,28 @@ pub fn Issue::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeErro
 pub fn Issue::not_equal(Self, Self) -> Bool
 pub fn Issue::to_json(Self) -> Json
 pub fn Issue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct LineDiff {
+  edits : Array[LineEdit]
+  precise : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LineDiff::equal(Self, Self) -> Bool
+pub fn LineDiff::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LineDiff::not_equal(Self, Self) -> Bool
+pub fn LineDiff::to_json(Self) -> Json
+pub fn LineDiff::to_repr(Self) -> @debug.Repr
+
+pub(all) struct LineEdit {
+  before_start : Int
+  before_count : Int
+  after_start : Int
+  after_count : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LineEdit::equal(Self, Self) -> Bool
+pub fn LineEdit::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LineEdit::not_equal(Self, Self) -> Bool
+pub fn LineEdit::to_json(Self) -> Json
+pub fn LineEdit::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Link {
   from : String

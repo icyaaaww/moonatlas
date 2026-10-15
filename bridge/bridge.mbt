@@ -19,6 +19,36 @@ pub fn dispatch(input : String) -> String {
           @json.from_json(prefs),
           @json.from_json(aliases),
         ).to_json()
+      {
+        "action": "health",
+        "documents": docs,
+        "preferences": prefs,
+        "aliases": aliases,
+        ..
+      } => {
+        let atlas = @atlas.build_atlas(
+          @json.from_json(docs),
+          @json.from_json(prefs),
+          @json.from_json(aliases),
+        )
+        if !atlas.issues.is_empty() {
+          return ({ "ok": false, "message": "资料集未通过校验" } : Json).stringify()
+        }
+        Json(@atlas.health_checks(atlas))
+      }
+      { "action": "impacts", "before": before, "after": after, .. } =>
+        @atlas.update_impacts(@json.from_json(before), @json.from_json(after)).to_json()
+      {
+        "action": "lines",
+        "before": String(before),
+        "after": String(after),
+        ..
+      } => {
+        if before.length() > 200000 || after.length() > 200000 {
+          return ({ "ok": false, "message": "章节文本超过上限" } : Json).stringify()
+        }
+        @atlas.diff_lines(before, after).to_json()
+      }
       { "action": "sections", "before": before, "after": after, .. } =>
         @atlas.compare_sections(@json.from_json(before), @json.from_json(after)).to_json()
       { "action": "compare", "before": before, "after": after, .. } =>

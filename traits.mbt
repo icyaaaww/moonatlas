@@ -165,3 +165,63 @@ pub extend SectionComparison with ToJson::{to_json}
 
 ///|
 pub extend SectionComparison with @json.FromJson::{from_json}
+
+///|
+pub extend HealthCheck with Eq::{equal, not_equal}
+
+///|
+pub extend HealthCheck with @debug.Debug::{to_repr}
+
+///|
+pub extend HealthCheck with ToJson::{to_json}
+
+///|
+pub extend HealthCheck with @json.FromJson::{from_json}
+
+///|
+pub extend Impact with Eq::{equal, not_equal}
+
+///|
+pub extend Impact with @debug.Debug::{to_repr}
+
+///|
+pub extend Impact with ToJson::{to_json}
+
+///|
+pub extend Impact with @json.FromJson::{from_json}
+
+///|
+pub extend ImpactReport with Eq::{equal, not_equal}
+
+///|
+pub extend ImpactReport with @debug.Debug::{to_repr}
+
+///|
+pub extend ImpactReport with ToJson::{to_json}
+
+///|
+pub extend ImpactReport with @json.FromJson::{from_json}
+
+///|
+pub extend LineEdit with Eq::{equal, not_equal}
+
+///|
+pub extend LineEdit with @debug.Debug::{to_repr}
+
+///|
+pub extend LineEdit with ToJson::{to_json}
+
+///|
+pub extend LineEdit with @json.FromJson::{from_json}
+
+///|
+pub extend LineDiff with Eq::{equal, not_equal}
+
+///|
+pub extend LineDiff with @debug.Debug::{to_repr}
+
+///|
+pub extend LineDiff with ToJson::{to_json}
+
+///|
+pub extend LineDiff with @json.FromJson::{from_json}

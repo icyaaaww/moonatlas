@@ -1,5 +1,7 @@
-import { core, build, emptyProject, replaceDocuments, parseProject, projectJSON, shareHTML, readDocuments } from './project.mjs';
+import { core, build, emptyProject, replaceDocuments, parseProject, projectJSON, shareHTML, readDocuments, validateReviews } from './project.mjs';
+import { reviewFor, reviewNames, checkNames, maintenanceReport } from './maintenance.mjs';
 import { sampleDocuments } from './samples.mjs';
+import { maintenanceSample } from './maintenance-sample.mjs';
 import { ProjectHistory } from './history.mjs';
 import { LocalDraft, DraftWriter } from './local-draft.mjs';
 import { mapControls, mountMap } from './map-view.mjs';
@@ -13,6 +15,8 @@ const history = new ProjectHistory();
 const mapState = {zoom:1,fit:false,focus:null,collapsed:new Set(),links:true,scrollLeft:0,scrollTop:0};
 const store = new LocalDraft(globalThis.indexedDB,location.pathname);
 let draftStatus='off', draftRecord=null, diffSelection=null, updateCache=[], sectionCache=new Map(), mutation=0;
+let healthCache=[], impactCache=[], healthFilter='pending', healthKind='all', healthPage=0;
+const lineCache=new Map();
 const writer = new DraftWriter(store,(status,value)=>{
   draftStatus=status;
   if(status==='saved')draftRecord=value;
@@ -22,7 +26,7 @@ const writer = new DraftWriter(store,(status,value)=>{
 const titles = {
   map: ['看见知识的全貌', '把散落的资料串起来。每一条线索，都可以回到原文。', '全局地图', '目录 → 文档 → 标题'],
   concepts: ['发现资料之间的联系', '同名标题是线索，是否属于同一概念，由你确认。', '跨文档线索', '保留每一处出处，不替你推断语义'],
-  organize: ['给知识一个清楚的位置', '处理未分类文档、相同内容和需要核实的内部引用。', '整理工作台', '所有操作只影响当前项目'],
+  organize: ['把整理变成可以完成的任务', '逐项核对资料结构，记录处理结果；原文更新后重新检查。', '知识库体检', '处理记录随项目保存'],
   changes: ['知道这次更新了什么', '对照你保存的基线，查看新增、修改、移除与重命名。', '更新记录', '按原文比较；不包含分类与显示名调整'],
 };
 const kindNames = { added:'新增', removed:'移除', updated:'修改', renamed:'重命名', invalid:'无效' };
@@ -127,7 +131,7 @@ function sectionComparison(path){
 }
 function showSectionChanges(path){
   const result=sectionComparison(path);
-  diffSelection={path,index:0,beforePage:0,afterPage:0};renderDetail();
+  diffSelection={path,index:0,beforePage:0,afterPage:0,hunk:0};renderDetail();
   if(!result.changes.length)toast('未发现可展示的章节差异，请核对完整原文');
   if(matchMedia('(max-width:950px)').matches)$('detail').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -142,8 +146,29 @@ function renderSectionDiff(host){
   if(!changes.length){body.append(node('p','hint','没有章节变化'));host.append(body);return;}
   const choose=node('label','field','选择变化章节');const dropdown=node('select');
   changes.forEach((c,i)=>{const option=node('option','',`${kindNames[c.kind]} · ${c.title}`);option.value=String(i);dropdown.append(option);});dropdown.value=String(diffSelection.index);
-  dropdown.addEventListener('change',()=>{diffSelection.index=Number(dropdown.value);diffSelection.beforePage=0;diffSelection.afterPage=0;renderDetail();});choose.append(dropdown);body.append(choose);
+  dropdown.addEventListener('change',()=>{diffSelection.index=Number(dropdown.value);diffSelection.beforePage=0;diffSelection.afterPage=0;diffSelection.hunk=0;renderDetail();});choose.append(dropdown);body.append(choose);
   const change=changes[diffSelection.index];
+  const cacheKey=JSON.stringify([diffSelection.path,change.id]);
+  if(!lineCache.has(cacheKey))lineCache.set(cacheKey,core('lines',{before:change.before_text,after:change.after_text}));
+  const lineDiff=lineCache.get(cacheKey);
+  const navigate=(index)=>{
+    diffSelection.hunk=index;
+    const edit=lineDiff.edits[index];
+    for(const side of ['before','after']){
+      const total=change[`${side}_text`].split('\n').length;
+      diffSelection[side+'Page']=Math.floor(Math.max(0,Math.min(total-1,edit[side+'_start']-1))/60);
+    }
+    renderDetail();
+    requestAnimationFrame(()=>document.querySelectorAll('.diff-source').forEach(p=>p.querySelector('.diff-active')?.scrollIntoView({block:'nearest'})));
+  };
+  if(lineDiff.edits.length){
+    const bar=node('div','diff-navigation');
+    const prev=button('上一处变化',()=>navigate(diffSelection.hunk-1));prev.disabled=diffSelection.hunk===0;
+    const next=button('下一处变化',()=>navigate(diffSelection.hunk+1));next.disabled=diffSelection.hunk>=lineDiff.edits.length-1;
+    bar.append(prev,node('span','',`${diffSelection.hunk+1} / ${lineDiff.edits.length} 处行变化`),next,button('定位此处',()=>navigate(diffSelection.hunk)));
+    body.append(bar,node('p','hint','− 删除 / 旧行　＋ 新增 / 新行；修改以两侧删除和新增表示。'));
+  }
+  if(!lineDiff.precise)body.append(node('div','notice','变化区域较大，已按整段标记；保留完整原文，不声称这是最小逐行差异。'));
   const row=node('div','card-row');row.append(node('h3','',change.title),node('span','change-kind '+change.kind,kindNames[change.kind]));body.append(row);
   const columns=node('div','diff-columns');
   for(const side of ['before','after']){
@@ -153,7 +178,13 @@ function renderSectionDiff(host){
     pane.append(node('div','path',`L${evidence.start_line}–${evidence.end_line}`));
     const lines=text.split('\n'),key=side+'Page',page=diffSelection[key],offset=page*60;
     const source=node('div','source diff-source');
-    lines.slice(offset,offset+60).forEach((text,i)=>{const row=node('div','source-line');row.append(node('span','line-no',String(evidence.start_line+offset+i)),node('span','line-text',text || ' '));source.append(row);});pane.append(source);
+    lines.slice(offset,offset+60).forEach((text,i)=>{
+      const relative=offset+i+1;
+      const editIndex=lineDiff.edits.findIndex(e=>relative>=e[side+'_start'] && relative<e[side+'_start']+e[side+'_count']);
+      const changed=editIndex>=0;
+      const row=node('div','source-line'+(changed?(side==='before'?' diff-deleted':' diff-added'):'')+(changed && editIndex===diffSelection.hunk?' diff-active':''));
+      row.append(node('span','line-no',String(evidence.start_line+offset+i)),node('span','diff-sign',changed?(side==='before'?'−':'+'):' '),node('span','line-text',text || ' '));source.append(row);
+    });pane.append(source);
     if(lines.length>60){const pagination=node('div','pagination');const prev=button('上一页',()=>{diffSelection[key]--;renderDetail();});prev.disabled=page===0;const next=button('下一页',()=>{diffSelection[key]++;renderDetail();});next.disabled=offset+60>=lines.length;pagination.append(prev,node('span','',`${page+1}/${Math.ceil(lines.length/60)}`),next);pane.append(pagination);}
     pane.append(button('下载这段原文',()=>download(`MoonAtlas-${side}.txt`,text,'text/plain'),'text-button'));
     if(side==='after')pane.append(button('定位当前原文',()=>select(diffSelection.path,evidence.start_line,evidence.end_line),'text-button'));
@@ -163,14 +194,18 @@ function renderSectionDiff(host){
 }
 function adopt(next, { sample = false, changed = true, remember = true, reset = false } = {}) {
   const graph = build(next);
+  const findings=core('health',next),ids=new Set(findings.map(c=>c.id));
+  next={...next,reviews:validateReviews(next.reviews).filter(r=>ids.has(r.id))};
   if(reset){history.clear();mapState.focus=null;mapState.collapsed.clear();mapState.scrollTop=0;mapState.scrollLeft=0;}
   else if(remember && atlas && JSON.stringify(project)!==JSON.stringify(next)){
     if(!history.push({project,demo}))toast('本次资料超过撤销缓存上限，请先下载项目备份');
   }
   const previousContent = selection && project.documents.find(d=>d.path===selection.path)?.content;
   project = next; atlas = graph; demo = sample; dirty = changed;
-  mutation++;diffSelection=null;sectionCache.clear();
+  mutation++;diffSelection=null;sectionCache.clear();lineCache.clear();healthPage=0;
+  healthCache=findings;
   updateCache=core('compare',{before:project.baseline,after:project.documents});
+  impactCache=core('impacts',{before:project.baseline,after:project.documents}).impacts;
   if(mapState.focus && !atlas.pages.some(p=>p.topic===mapState.focus))mapState.focus=null;
   if (selection && !project.documents.some(d => d.path === selection.path)) selection = null;
   if (selection && previousContent !== project.documents.find(d=>d.path===selection.path)?.content) {
@@ -213,7 +248,7 @@ function render() {
     const stat = node('div','stat'); stat.append(node('strong','',String(n).padStart(2,'0')),node('span','',label)); return stat;
   }));
   $('concept-count').textContent = atlas.concepts.filter(c => c.paths.length > 1).length;
-  $('issue-count').textContent = atlas.pages.filter(p => p.assignment === 'unclassified').length + atlas.duplicates.length + problematicLinks().length;
+  $('issue-count').textContent = healthCache.filter(c=>reviewFor(project,c).state==='pending').length;
   $('change-count').textContent = changes().length;
   document.querySelectorAll('.nav').forEach(b => { const active = b.dataset.view === view; b.classList.toggle('active', active); if (active) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   renderView(); renderDetail();
@@ -302,27 +337,64 @@ function editAlias() {
   ],[a,b]);
 }
 function renderOrganize(host) {
-  const wrap = node('div','cards'); let count = 0;
-  for (const p of atlas.pages.filter(p => p.assignment === 'unclassified' && matches(p))) {
-    const card = node('div','card'); card.append(node('div','issue-title','01 / 待分类'),node('h3','',p.title),node('p','','给这篇资料设置一个主题，让它出现在合适的地图分支。'),sourceButton(p.path)); wrap.append(card); count++;
+  const wrap = node('div','cards');
+  const summary=node('div','health-summary');
+  for(const state of ['pending','done','ignored']){
+    const b=button(`${reviewNames[state]} ${healthCache.filter(c=>reviewFor(project,c).state===state).length}`,()=>{healthFilter=state;healthPage=0;renderView();});
+    b.setAttribute('aria-pressed',String(healthFilter===state));summary.append(b);
   }
-  for (const d of atlas.duplicates.filter(d => !query || d.paths.some(path => matches(atlas.pages.find(p=>p.path===path))))) {
-    const card = node('div','card'); card.append(node('div','issue-title','02 / 内容完全相同'),node('h3','',`${d.paths.length} 份相同资料`),node('p','','按完整原文逐字比较。请核实用途后决定保留哪些文档。'));
-    d.paths.forEach(path=>card.append(sourceButton(path))); wrap.append(card); count++;
+  const all=button(`全部 ${healthCache.length}`,()=>{healthFilter='all';healthPage=0;renderView();});all.setAttribute('aria-pressed',String(healthFilter==='all'));summary.append(all);wrap.append(summary);
+  wrap.append(node('div','notice','已处理是你的核对记录，问题仍可能存在。原文修改后会重新待处理；修正后不再检测到的问题会从清单移除。忽略时请写明原因。'));
+  const filters=node('div','health-tools');const label=node('label','field','问题类型'),type=node('select');
+  for(const [key,text] of Object.entries({all:'全部类型',...checkNames})){const option=node('option','',text);option.value=key;type.append(option);}
+  type.value=healthKind;type.addEventListener('change',()=>{healthKind=type.value;healthPage=0;renderView();});label.append(type);
+  filters.append(label,button('导出整理报告',exportMaintenance));wrap.append(filters);
+  const items=healthCache.filter(c=>{
+    const r=reviewFor(project,c);
+    return (healthFilter==='all'||r.state===healthFilter) && (healthKind==='all'||c.kind===healthKind) && (!query || `${c.target} ${r.note}`.toLowerCase().includes(query) || c.paths.some(path=>matches(atlas.pages.find(p=>p.path===path))));
+  });
+  healthPage=Math.min(healthPage,Math.max(0,Math.ceil(items.length/30)-1));
+  for(const check of items.slice(healthPage*30,healthPage*30+30)){
+    const r=reviewFor(project,check),card=node('div','card health-card');card.dataset.kind=check.kind;
+    const title=check.kind==='link'?check.target:check.kind==='duplicate'?`${check.paths.length} 份相同资料`:atlas.pages.find(p=>p.path===check.paths[0]).title;
+    const header=node('div','card-row');header.append(node('div','issue-title',checkNames[check.kind]),node('span','review-state '+r.state,reviewNames[r.state]));
+    card.append(header,node('h3','',title),node('p','',check.kind==='link'?`${statusNames[check.status]}。只核对当前资料集，未导入也可能触发提示。`:check.kind==='duplicate'?'完整原文逐字相同；请核实是否因用途不同而需要保留。':'点击原文，在右侧设置所属主题。'));
+    check.paths.forEach(path=>card.append(sourceButton(path,check.line)));
+    if(r.reopened)card.append(node('div','notice','原文已变化，请重新核对。之前的备注已保留。'));
+    if(r.note)card.append(node('p','review-note',`备注：${r.note}`));
+    if(r.state==='done')card.append(node('p','hint','这条结构提示仍存在；标记已处理不会修改或删除原文。'));
+    const actions=node('div','review-actions');
+    actions.append(button('标记已处理',()=>editReview(check,'done')),button('忽略并备注',()=>editReview(check,'ignored')));
+    if(r.state!=='pending')actions.append(button('重新待处理',()=>saveReview(check,'pending',r.note),'text-button'));
+    card.append(actions);wrap.append(card);
   }
-  for (const l of problematicLinks().filter(l => !query || `${l.from} ${l.target}`.toLowerCase().includes(query))) {
-    const card = node('div','card'); card.append(node('div','issue-title','03 / '+statusNames[l.status]),node('h3','',l.target),node('p','','只检查当前导入的资料；未导入的文档也可能触发此提示。'),sourceButton(l.from,l.line)); wrap.append(card); count++;
-  }
+  if(items.length>30){const pagination=node('div','pagination');const previous=button('上一页任务',()=>{healthPage--;renderView();});previous.disabled=healthPage===0;const next=button('下一页任务',()=>{healthPage++;renderView();});next.disabled=(healthPage+1)*30>=items.length;pagination.append(previous,node('span','',`${healthPage+1}/${Math.ceil(items.length/30)} · ${items.length} 项`),next);wrap.append(pagination);}
   const unchecked = atlas.links.filter(l => ['fragment_unchecked','attachment_unchecked'].includes(l.status)).length;
   if (unchecked) wrap.append(node('div','notice',`${unchecked} 条锚点或附件引用未校验。本版本不读取附件，也不推断 Markdown 标题锚点。外部网址不会被请求。`));
-  if (!count) wrap.append(blank(query?'没有匹配的整理任务':'当前资料结构清楚','未发现待分类文档、完全相同的内容或支持范围内的内部引用问题。'));
+  if (!items.length) wrap.append(blank('当前筛选下没有任务','可以切换处理状态或问题类型，查看其他体检项。'));
   host.append(wrap);
+}
+function saveReview(check,state,note){
+  const reviews=[...(project.reviews||[]).filter(r=>r.id!==check.id),{id:check.id,state,note:note.trim(),reopened:false}];
+  adopt({...project,reviews},{sample:demo});toast('处理记录已保存到当前项目，可撤销；下载项目可保留记录');
+}
+function editReview(check,state){
+  const [wrap,input]=field(state==='ignored'?'忽略原因（必填）':'处理备注（可选）',reviewFor(project,check).note,1000);
+  modal(state==='ignored'?'忽略这条提示':'记录处理结果','只记录你的判断，原文不会被改写。来源原文更新后会重新提示检查。',[
+    ['保存处理记录',()=>{if(state==='ignored'&&!input.value.trim())throw new Error('请填写忽略原因');saveReview(check,state,input.value);},'primary'],
+  ],[wrap]);
+}
+function exportMaintenance(){
+  modal('导出整理报告','报告包含路径、引用目标、处理备注和更新引用位置，不包含原文正文。请确认这些信息适合分享。',[
+    ['下载 Markdown 报告',()=>download('MoonAtlas-maintenance.md',maintenanceReport(project,healthCache,impactCache),'text/markdown'),'primary'],
+  ]);
 }
 function renderChanges(host) {
   const wrap = node('div','cards'); const note = node('div','notice',`基线包含 ${project.baseline.length} 篇文档。通过“导入文档”合并新增/修改；通过“以本次文件替换资料集”比较完整快照，包括移除和重命名。`);
   note.append(node('br'),button('将当前资料设为基线', () => modal('更新比较基线','当前原文将成为下一次比较的起点，现有更新记录将清空。',[
     ['设为新基线', () => { adopt({...project,baseline:structuredClone(project.documents)},{sample:demo}); toast('比较基线已更新，请保存项目'); },'primary'],
-  ]))); wrap.append(note);
+  ]))); note.append(button('导出整理报告',exportMaintenance));wrap.append(note);
+  wrap.append(node('div','notice','影响追踪只列出新旧快照中指向变化文档的直接引用，不代表引用者内容一定需要修改，也不包含没有显式链接的依赖。'));
   const list = changes().filter(c => !query || `${c.path} ${c.previous_path}`.toLowerCase().includes(query));
   for (const c of list) {
     const card = node('div','card'); const row = node('div','card-row'); row.append(node('h3','',c.path),node('span','change-kind '+c.kind,kindNames[c.kind] || c.kind)); card.append(row);
@@ -333,15 +405,32 @@ function renderChanges(host) {
       const result=sectionComparison(c.path);
       card.append(button(`查看章节变化 · ${result.changes.length} 处`,()=>showSectionChanges(c.path),'section-compare-button'));
     }
+    const impacts=impactCache.filter(i=>i.changed_path===c.path);
+    if(impacts.length){
+      const group=node('details','impact-list');group.append(node('summary','',`需要核对的引用 · ${new Set(impacts.map(i=>i.source_path)).size} 篇 / ${impacts.length} 个快照位置`));
+      const content=node('div','impact-items');
+      let shown=0;
+      const more=button('显示更多引用',appendBatch);
+      function appendBatch(){
+        const batch=impacts.slice(shown,shown+30);shown+=batch.length;
+        batch.forEach(i=>{
+          const label=`${i.snapshot==='before'?'基线':'当前'} · ${i.source_path}${i.status==='fragment_unchecked'?' · 锚点未验证':''}`;
+          content.append(i.snapshot==='before'?button(`${label} · L${i.line} ↗`,()=>showBaseline(i.source_path,i.line),'source-link'):sourceButton(i.source_path,i.line,i.line,label));
+        });
+        more.hidden=shown>=impacts.length;
+      }
+      group.addEventListener('toggle',()=>{if(group.open && !shown)appendBatch();});group.append(content,more);card.append(group);
+    }else card.append(node('p','hint','两个快照中未找到指向此文档的可解析直接引用。'));
     wrap.append(card);
   }
   if(!list.length) wrap.append(blank('与基线相比，没有原文变化','你仍可调整分类与显示名。导入新版资料后，这里会列出变化。'));
   host.append(wrap);
 }
-function showBaseline(path) {
+function showBaseline(path,line=1) {
   const doc = project.baseline.find(d=>d.path===path);
-  const preview = node('pre','source',doc.content.slice(0,5000));
-  modal('基线中的文档',path+(doc.content.length>5000?' · 仅预览前 5,000 个字符':''),[['下载此原文',()=>download(path.split('/').at(-1),doc.content,'text/plain')]], [preview]);
+  const lines=doc.content.split('\n'),start=Math.max(0,line-4),end=Math.min(lines.length,start+60),preview=node('div','source');
+  lines.slice(start,end).forEach((text,i)=>{const row=node('div','source-line'+(start+i+1===line?' highlight':''));row.append(node('span','line-no',String(start+i+1)),node('span','line-text',text||' '));preview.append(row);});
+  modal('基线中的文档',`${path} · 基线 L${start+1}–${end} / 共 ${lines.length} 行。完整内容可下载。`,[['下载此原文',()=>download(path.split('/').at(-1),doc.content,'text/plain')]], [preview]);
 }
 function renderDetail() {
   const host = $('detail'); host.replaceChildren();
@@ -415,6 +504,7 @@ function showExport() {
     ['SVG 总览图',()=>download('MoonAtlas-map.svg',core('svg',project),'image/svg+xml')],
     ['Markdown 索引',()=>download('MoonAtlas-index.md',core('index',project),'text/markdown')],
     ['图谱 JSON',()=>download('MoonAtlas-graph.json',JSON.stringify(atlas,null,2),'application/json')],
+    ['整理报告 · 含备注',()=>download('MoonAtlas-maintenance.md',maintenanceReport(project,healthCache,impactCache),'text/markdown')],
     ['交互 HTML · 含原文',exportStandalone,'primary'],
   ]);
 }
@@ -440,6 +530,11 @@ $('project-input').addEventListener('change',async e=>{
 });
 $('save-project').addEventListener('click',save);$('export-menu').addEventListener('click',showExport);
 $('load-demo').addEventListener('click',()=>guardUnsaved(loadDemo));
+$('load-maintenance-demo').addEventListener('click',()=>guardUnsaved(()=>{
+  selection=null;expanded.clear();view='organize';healthFilter='pending';healthKind='all';
+  adopt(maintenanceSample(),{sample:true,changed:false,reset:true});
+  toast('已载入虚构演示：先完成体检，再查看更新记录中的引用与章节差异');
+}));
 $('new-project').addEventListener('click',()=>guardUnsaved(()=>{selection=null;expanded.clear();adopt(emptyProject(),{changed:false,reset:true});}));
 $('rename-project').addEventListener('click',()=>{const [wrap,input]=field('地图名称',project.name,120);modal('给地图起个名字','名称只影响当前项目的展示。', [['保存',()=>{if(!input.value.trim())throw new Error('请输入地图名称');adopt({...project,name:input.value.trim()},{sample:demo});},'primary']],[wrap]);});
 window.addEventListener('beforeunload',e=>{if((dirty && draftStatus!=='saved') || draftStatus==='pending'){e.preventDefault();e.returnValue='';}});

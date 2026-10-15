@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-10-15
+
+Local preview build; not yet published as a GitHub release.
+
+- MoonBit structural health findings and direct incoming update references from both snapshots.
+- Review workbench with pending/done/ignored states, required ignore reasons, type filters and paginated tasks.
+- Validated optional review metadata in v1 projects, undo/redo support and source-change rechecking.
+- Bounded MoonBit line diff with insertion/deletion highlights, cross-page change navigation and explicit large-region fallback.
+- Exact baseline reference preview for removed or renamed targets, including evidence beyond the first 5,000 characters.
+- Markdown maintenance reports, fictional maintenance demo and a focused user trial guide.
+- Added core, integration and offline browser regression coverage; see docs/validation.md for measured results.
+
 ## 0.2.0 — 2026-10-15
 
 Public source and offline distribution: https://github.com/icyaaaww/moonatlas

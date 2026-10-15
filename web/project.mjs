@@ -6,7 +6,7 @@ export function core(action, values) {
   return response.value;
 }
 export function emptyProject() {
-  return { format: 'moonatlas', version: 1, name: '我的知识地图', documents: [], preferences: [], aliases: [], baseline: [] };
+  return { format: 'moonatlas', version: 1, name: '我的知识地图', documents: [], preferences: [], aliases: [], baseline: [], reviews: [] };
 }
 export function build(project) {
   const atlas = core('build', project);
@@ -17,7 +17,21 @@ export function replaceDocuments(project, documents) {
   const preferences = core('reconcile', { before: project.documents, after: documents, preferences: project.preferences });
   const next = { ...project, documents, preferences };
   build(next);
-  return next;
+  const checks = core('health', next);
+  const changed = new Set(core('compare', {before:project.documents, after:documents}).flatMap(c=>[c.path,c.previous_path]));
+  const byId = new Map(checks.map(c=>[c.id,c]));
+  return {...next,reviews:(project.reviews || []).filter(r=>byId.has(r.id)).map(r=>byId.get(r.id).paths.some(p=>changed.has(p)) ? {...r,state:'pending',reopened:true} : r)};
+}
+export function validateReviews(reviews = []) {
+  if (!Array.isArray(reviews) || reviews.length > 2000 || JSON.stringify(reviews).length > 1000000) throw new Error('体检记录超过上限：最多 2,000 条、1,000,000 个文本码元');
+  const ids = new Set();
+  return reviews.map(r=>{
+    if (!r || typeof r.id !== 'string' || !r.id.length || r.id.length > 110000 || ids.has(r.id) ||
+        !['pending','done','ignored'].includes(r.state) || typeof r.note !== 'string' || r.note.length > 1000 ||
+        typeof r.reopened !== 'boolean' || (r.state === 'ignored' && !r.note.trim())) throw new Error('体检记录格式错误，忽略项必须填写原因');
+    ids.add(r.id);
+    return {id:r.id,state:r.state,note:r.note,reopened:r.reopened};
+  });
 }
 export function parseProject(text) {
   if (text.length > 30000000) throw new Error('项目文件过大，最多 30 MB 文本');
@@ -26,7 +40,7 @@ export function parseProject(text) {
       !Array.isArray(p.documents) || !Array.isArray(p.preferences) || !Array.isArray(p.aliases) || !Array.isArray(p.baseline)) {
     throw new Error('这不是受支持的 MoonAtlas v1 项目');
   }
-  const next = { format: 'moonatlas', version: 1, name: p.name, documents: p.documents, preferences: p.preferences, aliases: p.aliases, baseline: p.baseline };
+  const next = { format: 'moonatlas', version: 1, name: p.name, documents: p.documents, preferences: p.preferences, aliases: p.aliases, baseline: p.baseline, reviews:validateReviews(p.reviews) };
   build(next);
   build({ ...emptyProject(), documents: next.baseline });
   return next;

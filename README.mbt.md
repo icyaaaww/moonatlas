@@ -33,6 +33,9 @@ Public entry points:
 - `compare_documents(before, after)` reports additions, changes, removals and unique exact-content renames.
 - `compare_sections(before, after)` returns literal section additions/removals/edits with complete before/after text and line evidence; inspect `issues` and repeated-heading `notes`.
 - `reconcile_preferences(before, after, preferences)` transfers manual choices across those renames.
+- `health_checks(atlas)` creates stable structural findings with original paths and lines; validate `Atlas.issues` first.
+- `update_impacts(before, after)` returns direct incoming reference evidence from both snapshots, including deleted or renamed targets; inspect `issues`.
+- `diff_lines(before, after)` returns 1-based changed line ranges; a count of zero is an insertion/deletion boundary. `precise: false` explicitly indicates a bounded whole-region fallback. Browser transport limits each text to 200,000 UTF-16 units.
 - `export_index(atlas)` creates an escaped Markdown inventory with source line ranges.
 - `export_svg(atlas, title)` creates a portable topic/document overview.
 
