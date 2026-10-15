@@ -43,7 +43,7 @@ pub fn parse_document(doc : Document, preferences : Array[Preference]) -> Page {
     .map(s => s.trim_end(chars="\r").to_owned())
     .to_array()
   let mut front_end = -1
-  if lines[0].trim() == "---" {
+  if doc.path.to_lower().has_suffix(".md") && lines[0].trim() == "---" {
     for i = 1; i < lines.length() && i < 100; i = i + 1 {
       if lines[i].trim() == "---" {
         front_end = i
