@@ -13,6 +13,8 @@ pub fn compare_documents(Array[Document], Array[Document]) -> Array[Change]
 
 pub fn export_index(Atlas) -> String
 
+pub fn export_svg(Atlas, String) -> String
+
 pub fn normalize_name(String) -> String
 
 pub fn parse_document(Document, Array[Preference]) -> Page

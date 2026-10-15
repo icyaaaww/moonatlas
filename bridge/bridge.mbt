@@ -57,6 +57,24 @@ pub fn dispatch(input : String) -> String {
         }
         Json(@atlas.export_index(atlas))
       }
+      {
+        "action": "svg",
+        "documents": docs,
+        "preferences": prefs,
+        "aliases": aliases,
+        "name": String(name),
+        ..
+      } => {
+        let atlas = @atlas.build_atlas(
+          @json.from_json(docs),
+          @json.from_json(prefs),
+          @json.from_json(aliases),
+        )
+        if !atlas.issues.is_empty() {
+          return ({ "ok": false, "message": "资料集未通过校验" } : Json).stringify()
+        }
+        Json(@atlas.export_svg(atlas, name))
+      }
       _ =>
         return (
           {

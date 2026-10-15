@@ -59,7 +59,11 @@ fn resolve_target(
   if wiki {
     let names = paths
       .keys()
-      .filter(p => basename(p) == bare || p == bare || p == bare + ".md")
+      .filter(p => {
+        (!bare.contains("/") && basename(p) == basename(bare)) ||
+        p == bare ||
+        p == bare + ".md"
+      })
       .to_array()
     if names.length() == 1 {
       return (

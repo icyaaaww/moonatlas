@@ -1,18 +1,16 @@
 ///|
-fn alias_label(name : String, aliases : Array[Alias]) -> String {
+fn alias_label(name : String, aliases : Map[String, String]) -> String {
   let mut label = name
   for _i = 0; _i <= aliases.length(); _i = _i + 1 {
-    let found = aliases
-      .iter()
-      .find_first(a => normalize_name(a.name) == normalize_name(label))
+    let found = aliases.get(normalize_name(label))
     match found {
       None => break
-      Some(a) => {
-        if normalize_name(a.target) == normalize_name(label) {
-          label = a.target
+      Some(target) => {
+        if normalize_name(target) == normalize_name(label) {
+          label = target
           break
         }
-        label = a.target
+        label = target
       }
     }
   }
@@ -110,10 +108,14 @@ pub fn build_atlas(
     )
     return empty
   }
+  let alias_map : Map[String, String] = Map([])
+  for a in aliases { alias_map[normalize_name(a.name)] = a.target }
+  let labels : Map[String, String] = Map([])
+  for a in aliases { labels[normalize_name(a.name)] = alias_label(a.name, alias_map) }
   let grouped : Map[String, Concept] = Map([])
   for p in pages {
     for section in p.sections {
-      let label = alias_label(section.title, aliases)
+      let label = labels.get(normalize_name(section.title)).unwrap_or(section.title)
       let id = "concept:" + normalize_name(label)
       if !grouped.contains(id) {
         grouped[id] = { id, label, sources: [], paths: [], }
