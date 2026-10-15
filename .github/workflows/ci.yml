@@ -39,6 +39,8 @@ jobs:
       - run: moon fmt
       - name: Verify interfaces and formatting
         run: git diff --exit-code -- '*.mbt' '*.mbti' 'moon.mod' '**/moon.pkg'
+      - name: Validate Mooncakes archive
+        run: moon package --list
       - run: npm ci
       - run: npm run build
       - run: npm test

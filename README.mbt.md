@@ -2,7 +2,28 @@
 
 A pure MoonBit library for local, multi-document knowledge maps with source evidence.
 It performs no filesystem or network I/O. Hosts provide UTF-8 Markdown/TXT snapshots.
-The package name `icyaaaww/moonatlas` is currently local and is not published on Mooncakes.
+Core module: `icyaaaww/moonatlas`, library version `0.1.0`.
+The browser application's `1.0.0` version is independent of the library version.
+The current publishing tool requires a `0.x.y` module version; this is the first registry release of the core used by the 1.0 application.
+
+## Install and use
+
+In a MoonBit project, add the registry dependency:
+
+```sh
+moon add icyaaaww/moonatlas
+```
+
+Import the root package in your `moon.pkg`:
+
+```moonbit nocheck
+///|
+import {
+  "icyaaaww/moonatlas",
+}
+```
+
+Then call the API from a test or application. The following example is checked as part of the library's tests:
 
 ```mbt check
 ///|
@@ -45,4 +66,21 @@ Check `Atlas.issues` before using graph results. Invalid input produces an empty
 and explicit issues; invalid comparisons contain a `kind: "invalid"` entry.
 Low-level `parse_document` expects already validated documents; `build_atlas` is the
 recommended bounded API. Repeated headings are lexical clues, not inferred semantic
-equivalence. See README.md and docs/architecture.md for scope and limitations.
+equivalence. See `docs/architecture.md` for scope and limitations, and `docs/provenance.md`
+for sources and licenses. The archive includes the core, its tests, and `examples/demo`;
+the browser UI and npm build tools remain in the GitHub repository.
+
+## Validate from source
+
+```sh
+moon check --target all
+moon test --target js
+moon test --target wasm-gc
+moon run examples/demo --target js
+```
+
+Input limits: 200 documents, 200,000 UTF-16 units per document, 2,000,000 in total,
+3,000 headings, 5,000 references, 200 preferences and 200 aliases. Inputs beyond
+the limits produce explicit issues. Markdown scanning is intentionally bounded,
+not a complete CommonMark/YAML implementation. There is no PDF/Word reader,
+network connector, semantic inference or source-file mutation in this library.

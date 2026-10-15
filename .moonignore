@@ -1,0 +1,19 @@
+# Publish the reusable MoonBit library, its tests and runnable example.
+# This file overrides .gitignore for packaging; start from an explicit allowlist.
+/*
+!/*.mbt
+!/*.mbti
+!/moon.mod
+!/moon.pkg
+!/README.mbt.md
+!/LICENSE
+!/examples/
+!/examples/**
+!/docs/
+/docs/*
+!/docs/architecture.md
+!/docs/provenance.md
+!/third-party/
+/third-party/*
+!/third-party/moonbit-core-LICENSE
+!/third-party/moonbit-core-NOTICE

@@ -1,6 +1,8 @@
 name = "icyaaaww/moonatlas"
 
-version = "1.0.0"
+version = "0.1.0"
+
+repository = "https://github.com/icyaaaww/moonatlas"
 
 readme = "README.mbt.md"
 
