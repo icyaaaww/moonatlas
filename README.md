@@ -87,6 +87,7 @@ SVG 是主题与文档的总览；全部标题和原文可在交互 HTML 中查�
 
 ```sh
 npm ci
+moon update
 moon check --target all
 moon test --target js
 moon test --target wasm-gc
