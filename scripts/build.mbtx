@@ -9,7 +9,7 @@ import {
 async fn main {
   @shell.Cmd("moon", ["build", "--target", "js", "--release"]).run()
   @fs.write_file("web/core.mjs", @fs.read_file("_build/js/release/build/bridge/bridge.js"))
-  @shell.Cmd("node", ["node_modules/esbuild/bin/esbuild", "web/app.mjs", "--bundle", "--format=iife", "--target=es2022", "--charset=utf8", "--outfile=dist/app.js"]).run()
+  @shell.Cmd("node", ["--input-type=module", "-e", "import { build } from 'esbuild'; await build({entryPoints:['web/app.mjs'],bundle:true,format:'iife',target:'es2022',charset:'utf8',outfile:'dist/app.js',logLevel:'info'});"]).run()
   let html = @fs.read_file("web/index.html").text()
   let css = @fs.read_file("web/style.css").text()
   let js = @fs.read_file("dist/app.js").text().replace_all(old="</script",new="<\\/script")

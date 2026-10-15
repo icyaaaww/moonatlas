@@ -3,7 +3,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {readFile} from 'node:fs/promises';
 const app=pathToFileURL(fileURLToPath(new URL('../../dist/MoonAtlas.html',import.meta.url))).href;
 const fixture=(name,text)=>({name,mimeType:'text/plain',buffer:Buffer.from(text)});
-test.beforeEach(async({page})=>{await page.goto(app);});
+test.beforeEach(async({page,context})=>{await context.setOffline(true);await page.goto(app);});
 
 test('offline map, outline and exact line evidence work without network',async({page})=>{
   const remote=[];page.on('request',r=>{if(/^https?:/.test(r.url()))remote.push(r.url());});
@@ -64,6 +64,22 @@ test('invalid project and invalid UTF8 leave existing knowledge base intact',asy
   await expect(page.locator('#toast')).toContainText('不是受支持');await expect(page.locator('.doc-node')).toHaveCount(8);
   await page.locator('#files-input').setInputFiles({name:'bad.md',mimeType:'text/plain',buffer:Buffer.from([0xff])});
   await expect(page.locator('#toast')).toContainText('不是有效 UTF-8');await expect(page.locator('.doc-node')).toHaveCount(8);
+});
+test('updating a selected heading relocates evidence by stable section identity',async({page})=>{
+  await page.locator('#files-input').setInputFiles(fixture('note.md','# Title\n## Stable\nOriginal'));
+  await page.getByRole('button',{name:'展开 Title 的标题',exact:true}).click();
+  await page.locator('.outline button').filter({hasText:'Stable'}).click();
+  await page.locator('#files-input').setInputFiles(fixture('note.md','New preface\n# Title\n## Stable\nUpdated'));
+  await page.getByRole('button',{name:'合并新增 / 更新',exact:true}).click();
+  await expect(page.locator('#detail .highlight').first()).toContainText('3');
+  await expect(page.locator('#detail .highlight')).toContainText(['## Stable','Updated']);
+});
+test('SVG overview is valid XML and contains no scripts',async({page})=>{
+  await page.locator('#export-menu').click();
+  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'SVG 总览图',exact:true}).click();
+  const download=await pending;const svg=await readFile(await download.path(),'utf8');
+  const result=await page.evaluate(svg=>{const doc=new DOMParser().parseFromString(svg,'image/svg+xml');return {errors:doc.querySelectorAll('parsererror').length,scripts:doc.querySelectorAll('script').length,rects:doc.querySelectorAll('rect').length};},svg);
+  expect(result.errors).toBe(0);expect(result.scripts).toBe(0);expect(result.rects).toBeGreaterThan(8);
 });
 test('search filters full original text and mobile has no horizontal overflow',async({page})=>{
   await page.setViewportSize({width:390,height:844});

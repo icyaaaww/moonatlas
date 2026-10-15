@@ -67,3 +67,11 @@ test('host serves only app assets and has no write endpoints',async()=>{
     assert.match((await fetch(root+'/core.mjs')).headers.get('content-type'),/javascript/);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+test('maximum heading dataset and long alias chain remain complete',()=>{
+  const documents=Array.from({length:200},(_,i)=>({path:`topic/doc-${String(i).padStart(3,'0')}.md`,content:Array.from({length:15},(_,j)=>`## name-${j}\nEvidence ${i}/${j}`).join('\n')}));
+  const aliases=Array.from({length:199},(_,i)=>({name:`name-${i}`,target:`name-${i+1}`}));
+  const began=performance.now();const a=build({...emptyProject(),documents,aliases});
+  assert.equal(a.pages.length,200);assert.equal(a.pages.reduce((n,p)=>n+p.sections.length,0),3000);
+  assert.equal(a.concepts.length,1);assert.equal(a.concepts[0].sources.length,3000);
+  console.log(`Bounded fixture: 200 documents / 3000 headings / 199 aliases; ${Math.round(performance.now()-began)} ms (single local run, not a benchmark claim)`);
+});

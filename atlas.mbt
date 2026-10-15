@@ -109,13 +109,19 @@ pub fn build_atlas(
     return empty
   }
   let alias_map : Map[String, String] = Map([])
-  for a in aliases { alias_map[normalize_name(a.name)] = a.target }
+  for a in aliases {
+    alias_map[normalize_name(a.name)] = a.target
+  }
   let labels : Map[String, String] = Map([])
-  for a in aliases { labels[normalize_name(a.name)] = alias_label(a.name, alias_map) }
+  for a in aliases {
+    labels[normalize_name(a.name)] = alias_label(a.name, alias_map)
+  }
   let grouped : Map[String, Concept] = Map([])
   for p in pages {
     for section in p.sections {
-      let label = labels.get(normalize_name(section.title)).unwrap_or(section.title)
+      let label = labels
+        .get(normalize_name(section.title))
+        .unwrap_or(section.title)
       let id = "concept:" + normalize_name(label)
       if !grouped.contains(id) {
         grouped[id] = { id, label, sources: [], paths: [], }

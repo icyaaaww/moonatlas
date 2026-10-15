@@ -50,8 +50,14 @@ function guardUnsaved(action) {
 }
 function adopt(next, { sample = false, changed = true } = {}) {
   const graph = build(next);
+  const previousContent = selection && project.documents.find(d=>d.path===selection.path)?.content;
   project = next; atlas = graph; demo = sample; dirty = changed;
   if (selection && !project.documents.some(d => d.path === selection.path)) selection = null;
+  if (selection && previousContent !== project.documents.find(d=>d.path===selection.path)?.content) {
+    const section = atlas.pages.find(p=>p.path===selection.path)?.sections.find(s=>s.id===selection.sectionId);
+    selection = {...selection,start:section?.evidence.start_line || 1,end:section?.evidence.end_line || 1,sectionId:section?.id};
+    sourcePage = Math.floor((selection.start-1)/100);
+  }
   render();
 }
 function loadDemo() {
@@ -66,7 +72,8 @@ function matches(page) {
   return [page.title,page.path,page.topic,...page.tags,content].join('\n').toLocaleLowerCase().includes(query);
 }
 function select(path, start = 1, end = 1) {
-  selection = { path, start, end }; sourcePage = Math.floor((start - 1) / 100);
+  const section = atlas.pages.find(p=>p.path===path)?.sections.find(s=>s.evidence.start_line===start && s.evidence.end_line===end);
+  selection = { path, start, end, sectionId:section?.id }; sourcePage = Math.floor((start - 1) / 100);
   renderDetail();
   for (const el of document.querySelectorAll('.doc-node')) el.classList.toggle('selected', el.dataset.path === path);
   if (matchMedia('(max-width:950px)').matches) $('detail').scrollIntoView({ behavior:'smooth', block:'start' });
