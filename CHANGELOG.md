@@ -2,7 +2,7 @@
 
 ## 0.3.0 — 2026-10-15
 
-Local preview build; not yet published as a GitHub release.
+Public source and offline distribution: https://github.com/icyaaaww/moonatlas/releases/tag/v0.3.0
 
 - MoonBit structural health findings and direct incoming update references from both snapshots.
 - Review workbench with pending/done/ignored states, required ignore reasons, type filters and paginated tasks.
